@@ -180,12 +180,12 @@ GetXY (
     Status = AbsPointer->GetState (AbsPointer, &AbsState);
     if (!EFI_ERROR (Status)) {
       mLvglUefiMouse.LastCursorX = (AbsState.CurrentX * hor_res) / (AbsPointer->Mode->AbsoluteMaxX - AbsPointer->Mode->AbsoluteMinX);
-      if (mLvglUefiMouse.LastCursorX >= hor_res) {
-        mLvglUefiMouse.LastCursorX = hor_res;
+      if (mLvglUefiMouse.LastCursorX > hor_res - 1) {
+        mLvglUefiMouse.LastCursorX = hor_res - 1;
       }
       mLvglUefiMouse.LastCursorY = (AbsState.CurrentY * ver_res) / (AbsPointer->Mode->AbsoluteMaxY - AbsPointer->Mode->AbsoluteMinY);
-      if (mLvglUefiMouse.LastCursorY >= ver_res) {
-        mLvglUefiMouse.LastCursorY = ver_res;
+      if (mLvglUefiMouse.LastCursorY > ver_res - 1) {
+        mLvglUefiMouse.LastCursorY = ver_res - 1;
       }
       mLvglUefiMouse.LeftButton = AbsState.ActiveButtons & BIT0;
 
@@ -195,18 +195,18 @@ GetXY (
     SimplePointer = mLvglUefiMouse.SimplePointer;
     Status = SimplePointer->GetState (SimplePointer, &SimpleState);
     if (!EFI_ERROR (Status)) {
-      mLvglUefiMouse.LastCursorX += SimpleState.RelativeMovementX / (INT32)SimplePointer->Mode->ResolutionX;
-      if (mLvglUefiMouse.LastCursorX >= hor_res) {
-        mLvglUefiMouse.LastCursorX = hor_res;
+      mLvglUefiMouse.LastCursorX += (SimpleState.RelativeMovementX * hor_res) / (INT32)(50 * SimplePointer->Mode->ResolutionX);
+      if (mLvglUefiMouse.LastCursorX > hor_res - 1) {
+        mLvglUefiMouse.LastCursorX = hor_res - 1;
       }
-      if (mLvglUefiMouse.LastCursorX <= 0) {
+      if (mLvglUefiMouse.LastCursorX < 0) {
         mLvglUefiMouse.LastCursorX = 0;
       }
-      mLvglUefiMouse.LastCursorY += SimpleState.RelativeMovementY / (INT32)SimplePointer->Mode->ResolutionY;
-      if (mLvglUefiMouse.LastCursorY >= ver_res) {
-        mLvglUefiMouse.LastCursorY = ver_res;
+      mLvglUefiMouse.LastCursorY += (SimpleState.RelativeMovementY * ver_res) / (INT32)(50 * SimplePointer->Mode->ResolutionY);
+      if (mLvglUefiMouse.LastCursorY > ver_res - 1) {
+        mLvglUefiMouse.LastCursorY = ver_res - 1;
       }
-      if (mLvglUefiMouse.LastCursorY <= 0) {
+      if (mLvglUefiMouse.LastCursorY < 0) {
         mLvglUefiMouse.LastCursorY = 0;
       }
 
