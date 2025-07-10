@@ -127,6 +127,7 @@ UefiLvglAppRegister (
 
     while (1) {
       if (mExitBtnYes == EXIT_BTN_YES) {
+        LvglUefiEscExitUnregister ();
         break;
       }
 

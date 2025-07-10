@@ -36,4 +36,10 @@ LvglUefiEscExitRegister (
   VOID
   );
 
+VOID
+EFIAPI
+LvglUefiEscExitUnregister (
+  VOID
+  );
+
 #endif
