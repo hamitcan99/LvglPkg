@@ -4,6 +4,7 @@
 
 UINT8 mExitBtnYes = EXIT_BTN_NONE;
 STATIC BOOLEAN mPopUpActive = FALSE;
+VOID *mEscNotifyHandle = NULL;
 
 static lv_group_t *g_default_group = NULL;
 
@@ -112,7 +113,6 @@ LvglUefiEscExitRegister (
   EFI_STATUS                         Status;
   EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL  *TextInEx;
   EFI_KEY_DATA                       KeyData;
-  VOID                               *NotifyHandle;
 
   Status = gBS->HandleProtocol(gST->ConsoleInHandle, &gEfiSimpleTextInputExProtocolGuid, (VOID**)&TextInEx);
   if (EFI_ERROR(Status)) {
@@ -125,9 +125,28 @@ LvglUefiEscExitRegister (
                        TextInEx,
                        &KeyData, 
                        EscKeyNotifyCallBack,
-                       &NotifyHandle
+                       &mEscNotifyHandle
                        );
 
 }
 
+VOID
+EFIAPI
+LvglUefiEscExitUnregister (
+  VOID
+  )
+{
+  EFI_STATUS                         Status;
+  EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL  *TextInEx;
 
+  if (mEscNotifyHandle == NULL) {
+    return;
+  }
+
+  Status = gBS->HandleProtocol(gST->ConsoleInHandle, &gEfiSimpleTextInputExProtocolGuid, (VOID**)&TextInEx);
+  if (EFI_ERROR(Status)) {
+    return;
+  }
+
+  Status = TextInEx->UnregisterKeyNotify (TextInEx, mEscNotifyHandle);
+}
