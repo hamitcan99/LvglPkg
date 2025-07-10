@@ -60,7 +60,7 @@ typedef uint64_t  uint_fast64_t;
 
 #define calloc(n, s)                      AllocateZeroPool((n)*(s))
 #define memcpy(dest,source,count)         CopyMem(dest,source,(UINTN)(count))
-// #define memset(dest,ch,count)             SetMem(dest,(UINTN)(count),(UINT8)(ch))
+#define memset(dest,ch,count)             SetMem(dest,(UINTN)(count),(UINT8)(ch))
 #define memchr(buf,ch,count)              ScanMem8(buf,(UINTN)(count),(UINT8)ch)
 #define memcmp(buf1,buf2,count)           (int)(CompareMem(buf1,buf2,(UINTN)(count)))
 #define memmove(dest,source,count)        CopyMem(dest,source,(UINTN)(count))
@@ -137,8 +137,6 @@ long int labs (long int i);
 int abs (int i);
 
 char *strchr(const char *str, int ch);
-
-void* memset (void *dest, char ch, unsigned int count);
 
 #define exit(n)  ASSERT(FALSE);
 
