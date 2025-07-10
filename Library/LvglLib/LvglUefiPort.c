@@ -10,12 +10,6 @@ typedef struct {
 
 #define LVGL_OVERHEAD  sizeof(LVGL_HEAD)
 
-void* memset (void *dest, char ch, unsigned int count)
-{
-  return SetMem (dest, count, ch);
-}
-
-
 void *
 malloc (
   size_t  size

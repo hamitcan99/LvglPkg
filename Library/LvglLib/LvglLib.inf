@@ -57,6 +57,7 @@
   lvgl/src/core/lv_refr.c
   lvgl/src/display/lv_display.c
   lvgl/src/draw/lv_draw.c
+  lvgl/src/draw/lv_draw_3d.c
   lvgl/src/draw/lv_draw_arc.c
   lvgl/src/draw/lv_draw_buf.c
   lvgl/src/draw/lv_draw_image.c
@@ -140,12 +141,12 @@
   lvgl/src/draw/sw/blend/lv_draw_sw_blend.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_al88.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_argb8888.c
+  lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_argb8888_premultiplied.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_i1.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_l8.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_rgb565.c
+  lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_rgb565_swapped.c
   lvgl/src/draw/sw/blend/lv_draw_sw_blend_to_rgb888.c
-  lvgl/src/draw/sw/blend/helium/lv_blend_helium.S
-  lvgl/src/draw/sw/blend/neon/lv_blend_neon.S
   lvgl/src/draw/vg_lite/lv_draw_buf_vg_lite.c
   lvgl/src/draw/vg_lite/lv_draw_vg_lite.c
   lvgl/src/draw/vg_lite/lv_draw_vg_lite_arc.c
@@ -168,6 +169,7 @@
   lvgl/src/draw/vg_lite/lv_vg_lite_utils.c
   lvgl/src/drivers/display/drm/lv_linux_drm.c
   lvgl/src/drivers/display/fb/lv_linux_fbdev.c
+  lvgl/src/drivers/display/ft81x/lv_ft81x.c
   lvgl/src/drivers/display/ili9341/lv_ili9341.c
   lvgl/src/drivers/display/lcd/lv_lcd_generic_mipi.c
   lvgl/src/drivers/display/renesas_glcdc/lv_renesas_glcdc.c
@@ -203,6 +205,18 @@
   lvgl/src/drivers/uefi/lv_uefi_private.c
   lvgl/src/drivers/wayland/lv_wayland.c
   lvgl/src/drivers/wayland/lv_wayland_smm.c
+  lvgl/src/drivers/wayland/lv_wl_cache.c
+  lvgl/src/drivers/wayland/lv_wl_dmabuf.c
+  lvgl/src/drivers/wayland/lv_wl_keyboard.c
+  lvgl/src/drivers/wayland/lv_wl_pointer.c
+  lvgl/src/drivers/wayland/lv_wl_pointer_axis.c
+  lvgl/src/drivers/wayland/lv_wl_seat.c
+  lvgl/src/drivers/wayland/lv_wl_shell.c
+  lvgl/src/drivers/wayland/lv_wl_shm.c
+  lvgl/src/drivers/wayland/lv_wl_touch.c
+  lvgl/src/drivers/wayland/lv_wl_window.c
+  lvgl/src/drivers/wayland/lv_wl_window_decorations.c
+  lvgl/src/drivers/wayland/lv_wl_xdg_shell.c
   lvgl/src/drivers/windows/lv_windows_context.c
   lvgl/src/drivers/windows/lv_windows_display.c
   lvgl/src/drivers/windows/lv_windows_input.c
@@ -215,6 +229,7 @@
   lvgl/src/font/lv_font_montserrat_10.c
   lvgl/src/font/lv_font_montserrat_12.c
   lvgl/src/font/lv_font_montserrat_14.c
+  lvgl/src/font/lv_font_montserrat_14_aligned.c
   lvgl/src/font/lv_font_montserrat_16.c
   lvgl/src/font/lv_font_montserrat_18.c
   lvgl/src/font/lv_font_montserrat_20.c
@@ -236,6 +251,8 @@
   lvgl/src/font/lv_font_montserrat_8.c
   lvgl/src/font/lv_font_simsun_14_cjk.c
   lvgl/src/font/lv_font_simsun_16_cjk.c
+  lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c
+  lvgl/src/font/lv_font_source_han_sans_sc_16_cjk.c
   lvgl/src/font/lv_font_unscii_16.c
   lvgl/src/font/lv_font_unscii_8.c
   lvgl/src/indev/lv_indev.c
@@ -317,9 +334,10 @@
   lvgl/src/misc/lv_utils.c
   lvgl/src/misc/cache/lv_cache.c
   lvgl/src/misc/cache/lv_cache_entry.c
-  lvgl/src/misc/cache/lv_cache_lru_rb.c
-  lvgl/src/misc/cache/lv_image_cache.c
-  lvgl/src/misc/cache/lv_image_header_cache.c
+  lvgl/src/misc/cache/class/lv_cache_lru_ll.c
+  lvgl/src/misc/cache/class/lv_cache_lru_rb.c
+  lvgl/src/misc/cache/instance/lv_image_cache.c
+  lvgl/src/misc/cache/instance/lv_image_header_cache.c
   lvgl/src/osal/lv_cmsis_rtos2.c
   lvgl/src/osal/lv_freertos.c
   lvgl/src/osal/lv_linux.c
@@ -333,7 +351,6 @@
   lvgl/src/others/file_explorer/lv_file_explorer.c
   lvgl/src/others/font_manager/lv_font_manager.c
   lvgl/src/others/font_manager/lv_font_manager_recycle.c
-  lvgl/src/others/font_manager/lv_font_manager_utils.c
   lvgl/src/others/fragment/lv_fragment.c
   lvgl/src/others/fragment/lv_fragment_manager.c
   lvgl/src/others/gridnav/lv_gridnav.c
@@ -354,12 +371,17 @@
   lvgl/src/others/xml/lv_xml_component.c
   lvgl/src/others/xml/lv_xml_parser.c
   lvgl/src/others/xml/lv_xml_style.c
+  lvgl/src/others/xml/lv_xml_update.c
   lvgl/src/others/xml/lv_xml_utils.c
   lvgl/src/others/xml/lv_xml_widget.c
+  lvgl/src/others/xml/parsers/lv_xml_arc_parser.c
   lvgl/src/others/xml/parsers/lv_xml_bar_parser.c
   lvgl/src/others/xml/parsers/lv_xml_buttonmatrix_parser.c
   lvgl/src/others/xml/parsers/lv_xml_button_parser.c
+  lvgl/src/others/xml/parsers/lv_xml_calendar_parser.c
+  lvgl/src/others/xml/parsers/lv_xml_canvas_parser.c
   lvgl/src/others/xml/parsers/lv_xml_chart_parser.c
+  lvgl/src/others/xml/parsers/lv_xml_checkbox_parser.c
   lvgl/src/others/xml/parsers/lv_xml_dropdown_parser.c
   lvgl/src/others/xml/parsers/lv_xml_event_parser.c
   lvgl/src/others/xml/parsers/lv_xml_image_parser.c
@@ -391,6 +413,7 @@
   lvgl/src/themes/mono/lv_theme_mono.c
   lvgl/src/themes/simple/lv_theme_simple.c
   lvgl/src/tick/lv_tick.c
+  lvgl/src/widgets/3dtexture/lv_3dtexture.c
   lvgl/src/widgets/animimage/lv_animimage.c
   lvgl/src/widgets/arc/lv_arc.c
   lvgl/src/widgets/bar/lv_bar.c
@@ -467,4 +490,4 @@
 
   MSFT:*_*_*_CC_FLAGS = /wd4244 /wd4204 /wd4389 /wd4221 /wd4800 /wd4267 /wd4018 /wd4047 /wd4245 /wd4003 /wd4702 /wd4718 /wd4706 /wd4819 /wd4028
 
-  MSFT:*_*_*_CC_FLAGS = /GL-
+  # MSFT:*_*_*_CC_FLAGS = /GL-
