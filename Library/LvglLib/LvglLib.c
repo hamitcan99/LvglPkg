@@ -91,6 +91,8 @@ UefiLvglDeinit (
     return EFI_SUCCESS;
   }
 
+  LvglUefiEscExitUnregister ();
+
   lv_deinit();
 
   lv_port_indev_close();
@@ -127,7 +129,6 @@ UefiLvglAppRegister (
 
     while (1) {
       if (mExitBtnYes == EXIT_BTN_YES) {
-        LvglUefiEscExitUnregister ();
         break;
       }
 

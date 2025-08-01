@@ -149,4 +149,7 @@ LvglUefiEscExitUnregister (
   }
 
   Status = TextInEx->UnregisterKeyNotify (TextInEx, mEscNotifyHandle);
+  if (!EFI_ERROR(Status)) {
+    mEscNotifyHandle = NULL;
+  }
 }
