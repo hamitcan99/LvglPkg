@@ -45,7 +45,7 @@ static void UefiTimeCreate(lv_obj_t * parent)
 
 VOID
 EFIAPI
-LvglUefiDemoSetup (
+LvglUefiDashboard (
   VOID
   )
 {
@@ -120,7 +120,7 @@ UefiMain (
   EFI_STATUS  Status;
 
   if (UefiLvglInit() == EFI_SUCCESS) {
-    Status = UefiLvglAppRegister (LvglUefiDemoSetup);
+    Status = UefiLvglAppRegister (LvglUefiDashboard);
 
     if (!EFI_ERROR (Status)) {
       UefiLvglDeinit();
