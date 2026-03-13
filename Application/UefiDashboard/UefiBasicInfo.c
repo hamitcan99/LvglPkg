@@ -7,13 +7,6 @@
 **/
 
 #include "UefiDashboardCommon.h"
-#include "src/core/lv_obj.h"
-#include "src/core/lv_obj_pos.h"
-#include "src/misc/lv_area.h"
-#include "src/misc/lv_color.h"
-#include "src/misc/lv_style.h"
-#include "src/misc/lv_text.h"
-#include "src/widgets/table/lv_table.h"
 
 
 LV_ATTRIBUTE_MEM_ALIGN UINT8 *mLogoData = NULL;
@@ -51,7 +44,7 @@ DisplayUefiLogo (
 
   static lv_draw_buf_t draw_buf;
   lv_draw_buf_init(&draw_buf, Width, Height, LV_COLOR_FORMAT_ARGB8888, Stride, mLogoData, DataSize);
-  
+
   static lv_image_dsc_t img_dsc;
   lv_draw_buf_to_image(&draw_buf, &img_dsc);
 
@@ -236,7 +229,7 @@ UefiBiosInfo (
   lv_table_set_cell_value(table, 0, 1, " ");
   lv_table_set_cell_value(table, 1, 1, BiosVendor);
   lv_table_set_cell_value(table, 2, 1, BiosVersion);
-  
+
   lv_table_set_cell_ctrl(table, 0, 0, LV_TABLE_CELL_CTRL_MERGE_RIGHT);
 }
 
@@ -314,7 +307,7 @@ UefiCpuInfo (
   lv_table_set_cell_value(table, 2, 1, Version);
   lv_table_set_cell_value_fmt(table, 3, 1, "%dMHz", CpuSpeed);
   lv_table_set_cell_value_fmt(table, 4, 1, "%d", SocketCount);
-  
+
   lv_table_set_cell_ctrl(table, 0, 0, LV_TABLE_CELL_CTRL_MERGE_RIGHT);
 }
 
@@ -441,7 +434,7 @@ UefiDimmInfo (
   lv_table_set_cell_value(table, 3, 1, (SerialNumber != NULL) ? SerialNumber : "Null SN");
   lv_table_set_cell_value_fmt(table, 4, 1, "%dMT/s", DimmSpeed);
   lv_table_set_cell_value_fmt(table, 5, 1, "%d", DimmCount);
-  
+
   lv_table_set_cell_ctrl(table, 0, 0, LV_TABLE_CELL_CTRL_MERGE_RIGHT);
 }
 
