@@ -77,6 +77,7 @@ typedef uint64_t  uint_fast64_t;
 #define fprintf(...)
 #define vsnprintf   (int)AsciiVSPrint
 
+#define EOF  (-1)
 
 char *
 strcpy (
@@ -139,6 +140,24 @@ int abs (int i);
 char *strchr(const char *str, int ch);
 
 void* memset (void *dest, char ch, unsigned int count);
+
+FILE           *
+fopen      (
+  const char  *filename,
+  const char  *mode
+  );
+
+int
+fclose      (
+  FILE *
+  );
+
+int
+fscanf      (
+  FILE *stream,
+  const char *format,
+  ...
+  );
 
 #define exit(n)  ASSERT(FALSE);
 

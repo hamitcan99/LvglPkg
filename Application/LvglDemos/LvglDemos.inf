@@ -34,3 +34,6 @@
   BaseMemoryLib
   DebugLib
   LvglLib
+
+[BuildOptions]
+  MSFT:*_*_*_CC_FLAGS = /wd4244  # workaround for misc/lv_color.h(355), remove after lvgl update

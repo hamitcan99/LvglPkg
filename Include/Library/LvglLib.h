@@ -9,6 +9,10 @@
 #ifndef __LVGL_LIB_H__
 #define __LVGL_LIB_H__
 
+#if defined(_MSC_VER)
+#pragma warning(disable: 4244) // workaround for misc/lv_color.h(355), remove after lvgl update
+#endif
+
 #include <lvgl.h>
 
 typedef

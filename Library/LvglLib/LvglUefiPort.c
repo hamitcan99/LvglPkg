@@ -183,3 +183,30 @@ strncat (
 
   return strDest;
 }
+
+FILE *
+fopen (
+  const char  *filename,
+  const char  *mode
+  )
+{
+  return NULL;
+}
+
+int
+fclose (
+  FILE  *stream
+  )
+{
+  return EOF;
+}
+
+int
+fscanf      (
+  FILE *stream,
+  const char *format,
+  ...
+  )
+{
+  return EOF;
+}
