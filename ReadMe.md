@@ -22,6 +22,15 @@ build -p LvglPkg/LvglPkg.dsc -a AARCH64 -t GCC5 -b RELEASE
    - Call `UefiLvglAppRegister (MyApp)` to show `MyApp`
    - ~~Call `UefiLvglDeinit()` to do deinit, and you may need another code to do clear up for `MyApp`~~
 
+### DXE_DRIVER consumers
+
+LvglLib is also consumable by DXE drivers (e.g. a custom HII display engine).
+USB mouse protocols are typically not available at DXE dispatch time — they
+appear later during BDS `ConnectAll`. LvglLib registers a protocol-install
+notification on `gEfiAbsolutePointerProtocolGuid` at init time and creates
+the mouse indev lazily when the USB mouse binds, so no extra work is required
+from the consumer.
+
 ## Demo
 
 - [UefiDashboard.efi](./Demo/Bin/UefiDashboard.efi)
