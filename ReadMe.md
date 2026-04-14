@@ -136,8 +136,10 @@ The initial `FormDisplay()` implementation is working: LVGL renders HII forms wi
 - [x] Log/Debug Print
 - [x] LvglDisplayEngineDxe — EFI_DISPLAY_ENGINE_PROTOCOL skeleton
 - [x] FormDisplay() — IFR opcode → LVGL widget builder
-- [ ] Fix mouse in display engine (cursor lost on screen switch)
-- [ ] Fix keyboard navigation (arrow keys, ESC)
+- [x] Fix mouse in display engine (cursor lost on screen switch)
+- [x] Keyboard navigation (UP/DOWN focus, ESC exits form, ENTER toggles editing on spinbox/dropdown/textarea)
+- [ ] `EFI_IFR_ORDERED_LIST_OP` renderer (Boot Order / Driver Order)
+- [ ] Function-key hotkeys (F9 Load Defaults, F10 Save, driver-registered hotkeys from `HotKeyListHead`)
 - [ ] Theme/styling pass (fonts, colors, readability)
 - [ ] End-to-end form value editing and save/discard
 - [ ] File System
