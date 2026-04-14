@@ -48,6 +48,17 @@ lv_indev_t * indev_keypad;
 
 LVGL_UEFI_MOUSE mLvglUefiMouse;
 
+//
+// Protocol-install notification: fires when any driver installs
+// EFI_ABSOLUTE_POINTER_PROTOCOL (e.g. when USB mouse binds during BDS
+// ConnectAll). At constructor time USB is not yet enumerated, so the
+// initial lv_uefi_mouse_create() call fails; this callback retries
+// once the pointer protocol actually appears.
+//
+STATIC EFI_EVENT    mPointerNotifyEvent        = NULL;
+STATIC VOID         *mPointerNotifyRegistration = NULL;
+STATIC lv_display_t *mPointerNotifyDisplay     = NULL;
+
 /**********************
  *      MACROS
  **********************/
@@ -339,11 +350,30 @@ void lv_indev_set_cusor_start(lv_indev_t * indev)
 
 lv_indev_t * lv_uefi_mouse_create(lv_display_t * disp)
 {
+    //
+    // Idempotent: if a pointer indev already exists, return it.
+    // This lets callers invoke lv_uefi_mouse_create() lazily — e.g. after BDS
+    // has connected USB — without worrying about whether the constructor-time
+    // attempt succeeded.
+    //
+    lv_indev_t * existing = NULL;
+    while ((existing = lv_indev_get_next(existing)) != NULL) {
+        if (lv_indev_get_type(existing) == LV_INDEV_TYPE_POINTER) {
+            return existing;
+        }
+    }
+
+    if (EfiMouseInit() != EFI_SUCCESS) {
+        return NULL;
+    }
+
     lv_indev_t * indev = lv_indev_create();
     LV_ASSERT_MALLOC(indev);
     if(indev == NULL) {
       return NULL;
     }
+
+    DebugPrint (DEBUG_INFO, "Create Mouse\n");
 
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(indev, mouse_read);
@@ -358,31 +388,59 @@ lv_indev_t * lv_uefi_mouse_create(lv_display_t * disp)
     return indev;
 }
 
-
+STATIC
+VOID
+EFIAPI
+OnPointerProtocolInstalled (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+    if (mPointerNotifyDisplay != NULL) {
+        lv_uefi_mouse_create (mPointerNotifyDisplay);
+    }
+}
 
 void lv_port_indev_init(lv_display_t * disp)
 {
+    lv_uefi_mouse_create(disp);
 
-    /*------------------
-     * Mouse
-     * -----------------*/
-
-    /*Initialize your mouse if you have*/
-    if (EfiMouseInit() == EFI_SUCCESS) {
-      DebugPrint (DEBUG_INFO, "Create Mouse\n");
-      lv_uefi_mouse_create(disp);
-    }
-
-
-    /*------------------
-     * Keypad
-     * -----------------*/
     lv_uefi_keyboard_create();
 
+    //
+    // If the mouse couldn't be created yet (USB not connected at this point
+    // in boot), register for notification when the pointer protocol shows up.
+    //
+    if (mPointerNotifyEvent == NULL) {
+        EFI_STATUS Status;
+
+        mPointerNotifyDisplay = disp;
+
+        Status = gBS->CreateEvent (
+                       EVT_NOTIFY_SIGNAL,
+                       TPL_CALLBACK,
+                       OnPointerProtocolInstalled,
+                       NULL,
+                       &mPointerNotifyEvent
+                       );
+        if (!EFI_ERROR (Status)) {
+            gBS->RegisterProtocolNotify (
+                   &gEfiAbsolutePointerProtocolGuid,
+                   mPointerNotifyEvent,
+                   &mPointerNotifyRegistration
+                   );
+        }
+    }
 }
 
 void lv_port_indev_close()
 {
+  if (mPointerNotifyEvent != NULL) {
+    gBS->CloseEvent (mPointerNotifyEvent);
+    mPointerNotifyEvent         = NULL;
+    mPointerNotifyRegistration  = NULL;
+    mPointerNotifyDisplay       = NULL;
+  }
 
   mLvglUefiMouse.AbsPointer = NULL;
   mLvglUefiMouse.SimplePointer = NULL;
