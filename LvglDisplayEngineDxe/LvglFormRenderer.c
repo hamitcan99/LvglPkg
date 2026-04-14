@@ -245,6 +245,66 @@ OnEscPressed (
   }
 }
 
+STATIC
+VOID
+OnNavKey (
+  lv_event_t  *Event
+  )
+{
+  lv_key_t   Key;
+  bool       Editing;
+  lv_obj_t   *Focused;
+
+  Key     = lv_indev_get_key (lv_indev_active ());
+  Editing = lv_group_get_editing (mSession.Group);
+
+  if (Key == LV_KEY_ESC) {
+    if (Editing) {
+      lv_group_set_editing (mSession.Group, false);
+    } else {
+      mSession.UserInput->Action            = BROWSER_ACTION_FORM_EXIT;
+      mSession.UserInput->SelectedStatement = NULL;
+      mSession.ExitRequested                = TRUE;
+    }
+
+    lv_event_stop_processing (Event);
+    return;
+  }
+
+  if (Editing) {
+    return;
+  }
+
+  if (Key == LV_KEY_UP) {
+    lv_group_focus_prev (mSession.Group);
+    lv_event_stop_processing (Event);
+  } else if (Key == LV_KEY_DOWN) {
+    lv_group_focus_next (mSession.Group);
+    lv_event_stop_processing (Event);
+  } else if (Key == LV_KEY_ENTER) {
+    Focused = lv_group_get_focused (mSession.Group);
+    if ((Focused != NULL) &&
+        (lv_obj_check_type (Focused, &lv_spinbox_class) ||
+         lv_obj_check_type (Focused, &lv_dropdown_class) ||
+         lv_obj_check_type (Focused, &lv_textarea_class)))
+    {
+      lv_group_set_editing (mSession.Group, true);
+      lv_event_stop_processing (Event);
+    }
+  }
+}
+
+STATIC
+VOID
+AddToNavGroup (
+  lv_group_t  *Group,
+  lv_obj_t    *Widget
+  )
+{
+  lv_group_add_obj (Group, Widget);
+  lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY, NULL);
+}
+
 //
 // ---- Widget builders ----
 //
@@ -329,7 +389,7 @@ CreateCheckboxWidget (
     lv_obj_add_event_cb (Cb, OnCheckboxChanged, LV_EVENT_VALUE_CHANGED, Ctx);
   }
 
-  lv_group_add_obj (Group, Cb);
+  AddToNavGroup (Group, Cb);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -401,7 +461,7 @@ CreateNumericWidget (
     lv_obj_add_event_cb (Spinbox, OnStatementClicked, LV_EVENT_VALUE_CHANGED, Ctx);
   }
 
-  lv_group_add_obj (Group, Spinbox);
+  AddToNavGroup (Group, Spinbox);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -502,7 +562,7 @@ CreateOneOfWidget (
     lv_obj_add_event_cb (Dd, OnDropdownChanged, LV_EVENT_VALUE_CHANGED, Ctx);
   }
 
-  lv_group_add_obj (Group, Dd);
+  AddToNavGroup (Group, Dd);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -555,7 +615,7 @@ CreateStringWidget (
     lv_obj_add_event_cb (Ta, OnStatementClicked, LV_EVENT_READY, Ctx);
   }
 
-  lv_group_add_obj (Group, Ta);
+  AddToNavGroup (Group, Ta);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -594,7 +654,7 @@ CreateRefWidget (
     lv_obj_add_event_cb (Btn, OnStatementClicked, LV_EVENT_CLICKED, Ctx);
   }
 
-  lv_group_add_obj (Group, Btn);
+  AddToNavGroup (Group, Btn);
 
   if (Text != NULL) {
     FreePool (Text);
