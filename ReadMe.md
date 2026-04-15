@@ -36,6 +36,7 @@ We do **not** reimplement IFR parsing. SetupBrowserDxe handles all of that. Our 
 | PASSWORD           | `lv_textarea` (password mode) |
 | REF (goto)         | `lv_btn`             |
 | ACTION             | `lv_btn`             |
+| ORDERED_LIST       | vertical panel of rows with Up/Down buttons |
 
 ## Repository Structure
 
@@ -138,7 +139,7 @@ The initial `FormDisplay()` implementation is working: LVGL renders HII forms wi
 - [x] FormDisplay() — IFR opcode → LVGL widget builder
 - [x] Fix mouse in display engine (cursor lost on screen switch)
 - [x] Keyboard navigation (UP/DOWN focus, ESC exits form, ENTER toggles editing on spinbox/dropdown/textarea)
-- [ ] `EFI_IFR_ORDERED_LIST_OP` renderer (Boot Order / Driver Order)
+- [x] `EFI_IFR_ORDERED_LIST_OP` renderer (Boot Order / Driver Order) — Up/Down buttons per entry, reorder committed via `USER_INPUT.InputValue.Buffer`
 - [ ] Function-key hotkeys (F9 Load Defaults, F10 Save, driver-registered hotkeys from `HotKeyListHead`)
 - [ ] Theme/styling pass (fonts, colors, readability)
 - [ ] End-to-end form value editing and save/discard
