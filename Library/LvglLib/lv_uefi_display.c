@@ -32,17 +32,17 @@ void uefi_disp_flush(lv_display_t * disp, const lv_area_t * area, lv_color32_t *
   Delta = uefi_disp_data->EfiGop->Mode->Info->HorizontalResolution * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL);
 
   uefi_disp_data->EfiGop->Blt (
-                    uefi_disp_data->EfiGop,
-                    (EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)color32_p,
-                    EfiBltBufferToVideo,
-                    (UINTN)area->x1,
-                    (UINTN)area->y1,
-                    (UINTN)area->x1,
-                    (UINTN)area->y1,
-                    Width,
-                    Heigth,
-                    Delta
-                    );
+                            uefi_disp_data->EfiGop,
+                            (EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)color32_p,
+                            EfiBltBufferToVideo,
+                            (UINTN)area->x1,
+                            (UINTN)area->y1,
+                            (UINTN)area->x1,
+                            (UINTN)area->y1,
+                            Width,
+                            Heigth,
+                            Delta
+                            );
 
   lv_display_flush_ready(disp);
 }

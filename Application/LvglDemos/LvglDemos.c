@@ -16,9 +16,9 @@
 
 #include <Library/LvglLib.h>
 
-void lv_demo_keypad_encoder(void);   // ← önce declaration
+void lv_demo_keypad_encoder(void);
 
-VOID EFIAPI LvglDemoKeypadEncoderWrapper (VOID) {   // ← sonra wrapper
+VOID EFIAPI LvglDemoKeypadEncoderWrapper (VOID) {
   lv_demo_keypad_encoder();
 }
 
