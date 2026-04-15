@@ -19,14 +19,15 @@ STATIC BOOLEAN            mLvglReady = FALSE;
 //
 // Forward declarations for widget builders.
 //
-STATIC VOID CreateSubtitleWidget  (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
-STATIC VOID CreateTextWidget      (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
-STATIC VOID CreateCheckboxWidget  (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
-STATIC VOID CreateNumericWidget   (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
-STATIC VOID CreateOneOfWidget     (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
-STATIC VOID CreateStringWidget    (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
-STATIC VOID CreateRefWidget       (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
-STATIC VOID CreateActionWidget    (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateSubtitleWidget      (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
+STATIC VOID CreateTextWidget          (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
+STATIC VOID CreateCheckboxWidget      (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateNumericWidget       (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateOneOfWidget         (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateOrderedListWidget   (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateStringWidget        (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateRefWidget           (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
+STATIC VOID CreateActionWidget        (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
 
 //
 // ---- Helper: UCS-2 string to UTF-8 for LVGL ----
@@ -119,6 +120,70 @@ GetPromptUtf8 (
   FreePool (Str16);
   return Utf8;
 }
+
+//
+// ---- Ordered list array helpers (mirror of DisplayEngineDxe ProcessOptions.c) ----
+//
+
+STATIC
+UINT64
+GetArrayData (
+  IN VOID   *Array,
+  IN UINT8  Type,
+  IN UINTN  Index
+  )
+{
+  switch (Type) {
+    case EFI_IFR_TYPE_NUM_SIZE_8:
+      return (UINT64)*(((UINT8 *)Array) + Index);
+    case EFI_IFR_TYPE_NUM_SIZE_16:
+      return (UINT64)*(((UINT16 *)Array) + Index);
+    case EFI_IFR_TYPE_NUM_SIZE_32:
+      return (UINT64)*(((UINT32 *)Array) + Index);
+    case EFI_IFR_TYPE_NUM_SIZE_64:
+      return (UINT64)*(((UINT64 *)Array) + Index);
+    default:
+      return 0;
+  }
+}
+
+STATIC
+VOID
+SetArrayData (
+  IN VOID    *Array,
+  IN UINT8   Type,
+  IN UINTN   Index,
+  IN UINT64  Value
+  )
+{
+  switch (Type) {
+    case EFI_IFR_TYPE_NUM_SIZE_8:
+      *(((UINT8 *)Array) + Index) = (UINT8)Value;
+      break;
+    case EFI_IFR_TYPE_NUM_SIZE_16:
+      *(((UINT16 *)Array) + Index) = (UINT16)Value;
+      break;
+    case EFI_IFR_TYPE_NUM_SIZE_32:
+      *(((UINT32 *)Array) + Index) = (UINT32)Value;
+      break;
+    case EFI_IFR_TYPE_NUM_SIZE_64:
+      *(((UINT64 *)Array) + Index) = (UINT64)Value;
+      break;
+    default:
+      break;
+  }
+}
+
+//
+// Per-button context for ordered-list Up/Down buttons.
+//
+typedef struct {
+  FORM_DISPLAY_ENGINE_STATEMENT  *Statement;
+  UINT8                          ValueType;
+  UINTN                          ActiveCount;
+  UINTN                          Index;
+  INT32                          Direction;
+} LVGL_ORDERED_MOVE_CTX;
 
 //
 // ---- Event callbacks ----
@@ -224,6 +289,54 @@ OnDropdownChanged (
 
     CurIdx++;
   }
+}
+
+/**
+  Ordered-list Up/Down button handler — swaps two entries in the buffer
+  and emits the reordered buffer via USER_INPUT so SetupBrowserDxe
+  re-invokes FormDisplay() with the updated state.
+**/
+STATIC
+VOID
+OnOrderedListMove (
+  lv_event_t  *Event
+  )
+{
+  LVGL_ORDERED_MOVE_CTX           *MoveCtx;
+  FORM_DISPLAY_ENGINE_STATEMENT   *Statement;
+  VOID                            *NewBuf;
+  UINTN                           i;
+  UINTN                           j;
+  UINT64                          Tmp;
+
+  MoveCtx = (LVGL_ORDERED_MOVE_CTX *)lv_event_get_user_data (Event);
+  if (MoveCtx == NULL || mSession.UserInput == NULL) {
+    return;
+  }
+
+  Statement = MoveCtx->Statement;
+  i = MoveCtx->Index;
+  j = (UINTN)((INT32)i + MoveCtx->Direction);
+
+  if (j >= MoveCtx->ActiveCount) {
+    return;
+  }
+
+  NewBuf = AllocateCopyPool (Statement->CurrentValue.BufferLen, Statement->CurrentValue.Buffer);
+  if (NewBuf == NULL) {
+    return;
+  }
+
+  Tmp = GetArrayData (NewBuf, MoveCtx->ValueType, i);
+  SetArrayData (NewBuf, MoveCtx->ValueType, i, GetArrayData (NewBuf, MoveCtx->ValueType, j));
+  SetArrayData (NewBuf, MoveCtx->ValueType, j, Tmp);
+
+  mSession.UserInput->SelectedStatement  = Statement;
+  mSession.UserInput->InputValue.Type    = EFI_IFR_TYPE_BUFFER;
+  mSession.UserInput->InputValue.Buffer  = NewBuf;
+  mSession.UserInput->InputValue.BufferLen = Statement->CurrentValue.BufferLen;
+  mSession.UserInput->Action             = 0;
+  mSession.ExitRequested                 = TRUE;
 }
 
 /**
@@ -571,6 +684,189 @@ CreateOneOfWidget (
 
 STATIC
 VOID
+CreateOrderedListWidget (
+  lv_obj_t                        *Parent,
+  FORM_DISPLAY_ENGINE_STATEMENT   *Statement,
+  EFI_HII_HANDLE                  HiiHandle,
+  lv_group_t                      *Group
+  )
+{
+  CHAR8                    *PromptText;
+  lv_obj_t                 *Panel;
+  lv_obj_t                 *Header;
+  lv_obj_t                 *Row;
+  lv_obj_t                 *Label;
+  lv_obj_t                 *UpBtn;
+  lv_obj_t                 *DownBtn;
+  lv_obj_t                 *BtnLabel;
+  LIST_ENTRY               *Link;
+  DISPLAY_QUESTION_OPTION  *FirstOption;
+  DISPLAY_QUESTION_OPTION  *Option;
+  EFI_IFR_ORDERED_LIST     *OrderOp;
+  UINT8                    ValueType;
+  UINTN                    MaxContainers;
+  UINTN                    ActiveCount;
+  UINTN                    i;
+  UINT64                   Value;
+  CHAR16                   *OptStr16;
+  CHAR8                    *OptStr8;
+  LVGL_ORDERED_MOVE_CTX    *UpCtx;
+  LVGL_ORDERED_MOVE_CTX    *DownCtx;
+  BOOLEAN                  Grayout;
+
+  if (IsListEmpty (&Statement->OptionListHead)) {
+    return;
+  }
+
+  OrderOp       = (EFI_IFR_ORDERED_LIST *)Statement->OpCode;
+  MaxContainers = OrderOp->MaxContainers;
+  Grayout       = (BOOLEAN)((Statement->Attribute & HII_DISPLAY_GRAYOUT) != 0);
+
+  Link        = GetFirstNode (&Statement->OptionListHead);
+  FirstOption = DISPLAY_QUESTION_OPTION_FROM_LINK (Link);
+  ValueType   = FirstOption->OptionOpCode->Type;
+
+  //
+  // Determine number of active (non-zero) entries, bounded by MaxContainers.
+  //
+  ActiveCount = 0;
+  for (i = 0; i < MaxContainers; i++) {
+    if (GetArrayData (Statement->CurrentValue.Buffer, ValueType, i) == 0) {
+      break;
+    }
+    ActiveCount++;
+  }
+
+  PromptText = GetPromptUtf8 (Statement, HiiHandle);
+
+  //
+  // Outer panel — vertical flex column holding header + one row per entry.
+  //
+  Panel = lv_obj_create (Parent);
+  lv_obj_set_size (Panel, LV_PCT (100), LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow (Panel, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all (Panel, 4, 0);
+  lv_obj_set_style_border_width (Panel, 0, 0);
+  lv_obj_set_style_bg_opa (Panel, LV_OPA_TRANSP, 0);
+
+  Header = lv_label_create (Panel);
+  lv_label_set_text (Header, PromptText != NULL ? PromptText : "Ordered List");
+  lv_obj_set_style_text_font (Header, &lv_font_montserrat_16, 0);
+
+  for (i = 0; i < ActiveCount; i++) {
+    Value = GetArrayData (Statement->CurrentValue.Buffer, ValueType, i);
+
+    //
+    // Find the option whose Value matches this slot. Read the option's
+    // Value at its native width — IFR stores it at ValueType size, so
+    // reading .u64 would over-read into neighboring bytes.
+    //
+    OptStr8 = NULL;
+    for (Link = Statement->OptionListHead.ForwardLink;
+         Link != &Statement->OptionListHead;
+         Link = Link->ForwardLink)
+    {
+      UINT64  OptValue;
+
+      Option = DISPLAY_QUESTION_OPTION_FROM_LINK (Link);
+      switch (ValueType) {
+        case EFI_IFR_TYPE_NUM_SIZE_8:
+          OptValue = Option->OptionOpCode->Value.u8;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_16:
+          OptValue = Option->OptionOpCode->Value.u16;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_32:
+          OptValue = Option->OptionOpCode->Value.u32;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_64:
+          OptValue = Option->OptionOpCode->Value.u64;
+          break;
+        default:
+          OptValue = 0;
+          break;
+      }
+
+      if (OptValue == Value) {
+        OptStr16 = HiiGetString (HiiHandle, Option->OptionOpCode->Option, NULL);
+        if (OptStr16 != NULL) {
+          OptStr8 = Ucs2ToUtf8 (OptStr16);
+          FreePool (OptStr16);
+        }
+
+        break;
+      }
+    }
+
+    Row = lv_obj_create (Panel);
+    lv_obj_set_size (Row, LV_PCT (100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow (Row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_all (Row, 2, 0);
+    lv_obj_set_style_border_width (Row, 0, 0);
+    lv_obj_set_style_bg_opa (Row, LV_OPA_TRANSP, 0);
+
+    Label = lv_label_create (Row);
+    lv_label_set_text (Label, OptStr8 != NULL ? OptStr8 : "?");
+    lv_obj_set_flex_grow (Label, 1);
+
+    if (OptStr8 != NULL) {
+      FreePool (OptStr8);
+    }
+
+    //
+    // Up button.
+    //
+    UpBtn    = lv_btn_create (Row);
+    BtnLabel = lv_label_create (UpBtn);
+    lv_label_set_text (BtnLabel, LV_SYMBOL_UP);
+
+    if (Grayout || (i == 0)) {
+      lv_obj_add_state (UpBtn, LV_STATE_DISABLED);
+    } else {
+      UpCtx = AllocateZeroPool (sizeof (LVGL_ORDERED_MOVE_CTX));
+      if (UpCtx != NULL) {
+        UpCtx->Statement   = Statement;
+        UpCtx->ValueType   = ValueType;
+        UpCtx->ActiveCount = ActiveCount;
+        UpCtx->Index       = i;
+        UpCtx->Direction   = -1;
+        lv_obj_add_event_cb (UpBtn, OnOrderedListMove, LV_EVENT_CLICKED, UpCtx);
+      }
+
+      AddToNavGroup (Group, UpBtn);
+    }
+
+    //
+    // Down button.
+    //
+    DownBtn  = lv_btn_create (Row);
+    BtnLabel = lv_label_create (DownBtn);
+    lv_label_set_text (BtnLabel, LV_SYMBOL_DOWN);
+
+    if (Grayout || (i + 1 >= ActiveCount)) {
+      lv_obj_add_state (DownBtn, LV_STATE_DISABLED);
+    } else {
+      DownCtx = AllocateZeroPool (sizeof (LVGL_ORDERED_MOVE_CTX));
+      if (DownCtx != NULL) {
+        DownCtx->Statement   = Statement;
+        DownCtx->ValueType   = ValueType;
+        DownCtx->ActiveCount = ActiveCount;
+        DownCtx->Index       = i;
+        DownCtx->Direction   = 1;
+        lv_obj_add_event_cb (DownBtn, OnOrderedListMove, LV_EVENT_CLICKED, DownCtx);
+      }
+
+      AddToNavGroup (Group, DownBtn);
+    }
+  }
+
+  if (PromptText != NULL) {
+    FreePool (PromptText);
+  }
+}
+
+STATIC
+VOID
 CreateStringWidget (
   lv_obj_t                        *Parent,
   FORM_DISPLAY_ENGINE_STATEMENT   *Statement,
@@ -727,6 +1023,10 @@ BuildFormWidgets (
 
       case EFI_IFR_ONE_OF_OP:
         CreateOneOfWidget (Session->Screen, Statement, HiiHandle, Session->Group);
+        break;
+
+      case EFI_IFR_ORDERED_LIST_OP:
+        CreateOrderedListWidget (Session->Screen, Statement, HiiHandle, Session->Group);
         break;
 
       case EFI_IFR_STRING_OP:
