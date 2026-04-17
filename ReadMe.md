@@ -41,7 +41,7 @@ build -p LvglPkg/LvglPkg.dsc -a AARCH64 -t GCC5 -b RELEASE
 ## TODO
 - [x] Absolute Pointer Mouse
 - [x] Simple Pointer Mouse
-- [ ] Mouse Wheel
+- [x] Mouse Wheel
 - [x] Log/Debug Print
 - [ ] File System
 - [ ] ~~VS2022~~/~~AARCH64-GCC~~/Clang
