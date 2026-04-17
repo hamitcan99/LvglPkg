@@ -39,4 +39,13 @@ UefiLvglAppRegister (
   IN EFI_LVGL_APP_FUNCTION AppRegister
   );
 
+/**
+  Drain the EFI keyboard buffer and reset the LVGL keypad indev state so that
+  no pending key-press leaks into the next event loop.
+**/
+void
+lv_uefi_keypad_drain (
+  void
+  );
+
 #endif
