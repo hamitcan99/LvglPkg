@@ -340,22 +340,170 @@ OnOrderedListMove (
 }
 
 /**
-  ESC key handler — signals form exit.
+  Indev-level ESC fallback — LVGL only routes LV_EVENT_KEY to a focused widget,
+  so forms with no focusable items (e.g. an empty Driver Health Manager form)
+  would eat ESC. This handler runs on every keypress the indev produces, and
+  handles ESC whenever OnNavKey wouldn't fire because nothing is focused.
 **/
 STATIC
 VOID
-OnEscPressed (
+OnIndevFallbackKey (
   lv_event_t  *Event
   )
 {
-  lv_key_t  Key;
+  lv_indev_t  *Indev;
+  lv_key_t    Key;
 
-  Key = lv_indev_get_key (lv_indev_active ());
-  if (Key == LV_KEY_ESC) {
-    mSession.UserInput->Action    = BROWSER_ACTION_FORM_EXIT;
-    mSession.UserInput->SelectedStatement = NULL;
-    mSession.ExitRequested        = TRUE;
+  Indev = lv_indev_active ();
+  Key   = lv_indev_get_key (Indev);
+
+  if ((mSession.Group != NULL) && (lv_group_get_focused (mSession.Group) != NULL)) {
+    //
+    // A widget has focus — OnNavKey will handle the key.
+    //
+    return;
   }
+
+  if (Key == LV_KEY_ESC) {
+    mSession.UserInput->Action            = BROWSER_ACTION_FORM_EXIT;
+    mSession.UserInput->SelectedStatement = NULL;
+    mSession.ExitRequested                = TRUE;
+  }
+}
+
+STATIC
+VOID
+GetNumericRange (
+  IN  EFI_IFR_NUMERIC  *NumOp,
+  OUT UINT64           *MinVal,
+  OUT UINT64           *MaxVal
+  )
+{
+  switch (NumOp->Flags & EFI_IFR_NUMERIC_SIZE) {
+    case EFI_IFR_NUMERIC_SIZE_1:
+      *MinVal = NumOp->data.u8.MinValue;
+      *MaxVal = NumOp->data.u8.MaxValue;
+      break;
+    case EFI_IFR_NUMERIC_SIZE_2:
+      *MinVal = NumOp->data.u16.MinValue;
+      *MaxVal = NumOp->data.u16.MaxValue;
+      break;
+    case EFI_IFR_NUMERIC_SIZE_4:
+      *MinVal = NumOp->data.u32.MinValue;
+      *MaxVal = NumOp->data.u32.MaxValue;
+      break;
+    default:
+      *MinVal = NumOp->data.u64.MinValue;
+      *MaxVal = NumOp->data.u64.MaxValue;
+      break;
+  }
+}
+
+STATIC
+UINT64
+AsciiDecimalToUint64 (
+  IN CONST CHAR8  *Str
+  )
+{
+  UINT64  Value = 0;
+
+  while ((*Str >= '0') && (*Str <= '9')) {
+    Value = Value * 10 + (UINT64)(*Str - '0');
+    Str++;
+  }
+
+  return Value;
+}
+
+STATIC
+VOID
+Uint64ToAsciiDecimal (
+  IN  UINT64  Value,
+  OUT CHAR8   *Buf,
+  IN  UINTN   BufLen
+  )
+{
+  CHAR8  Tmp[24];
+  UINTN  i;
+  UINTN  o;
+
+  i = 0;
+  if (Value == 0) {
+    Tmp[i++] = '0';
+  } else {
+    while ((Value > 0) && (i < sizeof (Tmp))) {
+      Tmp[i++] = (CHAR8)('0' + (Value % 10));
+      Value   /= 10;
+    }
+  }
+
+  o = 0;
+  while ((i > 0) && (o + 1 < BufLen)) {
+    Buf[o++] = Tmp[--i];
+  }
+
+  Buf[o] = '\0';
+}
+
+/**
+  Numeric textarea commit — fires when the user presses ENTER on a one_line
+  textarea (LV_EVENT_READY). Parses the typed text, clamps to the IFR
+  Min/Max range, and delivers the new value to the browser.
+**/
+STATIC
+VOID
+OnNumericReady (
+  lv_event_t  *Event
+  )
+{
+  LVGL_STATEMENT_CONTEXT  *Ctx;
+  lv_obj_t                *Ta;
+  CONST CHAR8             *Text;
+  UINT64                  Value;
+  UINT64                  MinVal;
+  UINT64                  MaxVal;
+  EFI_IFR_NUMERIC         *NumOp;
+
+  Ctx = (LVGL_STATEMENT_CONTEXT *)lv_event_get_user_data (Event);
+  if ((Ctx == NULL) || (mSession.UserInput == NULL)) {
+    return;
+  }
+
+  Ta    = lv_event_get_target_obj (Event);
+  Text  = lv_textarea_get_text (Ta);
+  Value = AsciiDecimalToUint64 (Text);
+
+  NumOp = (EFI_IFR_NUMERIC *)Ctx->Statement->OpCode;
+  GetNumericRange (NumOp, &MinVal, &MaxVal);
+
+  if (Value < MinVal) {
+    Value = MinVal;
+  }
+
+  if (Value > MaxVal) {
+    Value = MaxVal;
+  }
+
+  mSession.UserInput->SelectedStatement = Ctx->Statement;
+  mSession.UserInput->InputValue.Type   = Ctx->Statement->CurrentValue.Type;
+
+  switch (NumOp->Flags & EFI_IFR_NUMERIC_SIZE) {
+    case EFI_IFR_NUMERIC_SIZE_1:
+      mSession.UserInput->InputValue.Value.u8 = (UINT8)Value;
+      break;
+    case EFI_IFR_NUMERIC_SIZE_2:
+      mSession.UserInput->InputValue.Value.u16 = (UINT16)Value;
+      break;
+    case EFI_IFR_NUMERIC_SIZE_4:
+      mSession.UserInput->InputValue.Value.u32 = (UINT32)Value;
+      break;
+    default:
+      mSession.UserInput->InputValue.Value.u64 = Value;
+      break;
+  }
+
+  mSession.UserInput->Action = 0;
+  mSession.ExitRequested     = TRUE;
 }
 
 STATIC
@@ -364,12 +512,14 @@ OnNavKey (
   lv_event_t  *Event
   )
 {
-  lv_key_t   Key;
-  bool       Editing;
-  lv_obj_t   *Focused;
+  lv_key_t                Key;
+  bool                    Editing;
+  lv_obj_t                *Focused;
+  LVGL_STATEMENT_CONTEXT  *Ctx;
 
   Key     = lv_indev_get_key (lv_indev_active ());
   Editing = lv_group_get_editing (mSession.Group);
+  Ctx     = (LVGL_STATEMENT_CONTEXT *)lv_event_get_user_data (Event);
 
   if (Key == LV_KEY_ESC) {
     if (Editing) {
@@ -388,6 +538,8 @@ OnNavKey (
     return;
   }
 
+  (void)Ctx;
+
   if (Key == LV_KEY_UP) {
     lv_group_focus_prev (mSession.Group);
     lv_event_stop_processing (Event);
@@ -397,8 +549,7 @@ OnNavKey (
   } else if (Key == LV_KEY_ENTER) {
     Focused = lv_group_get_focused (mSession.Group);
     if ((Focused != NULL) &&
-        (lv_obj_check_type (Focused, &lv_spinbox_class) ||
-         lv_obj_check_type (Focused, &lv_dropdown_class) ||
+        (lv_obj_check_type (Focused, &lv_dropdown_class) ||
          lv_obj_check_type (Focused, &lv_textarea_class)))
     {
       lv_group_set_editing (mSession.Group, true);
@@ -410,12 +561,13 @@ OnNavKey (
 STATIC
 VOID
 AddToNavGroup (
-  lv_group_t  *Group,
-  lv_obj_t    *Widget
+  lv_group_t              *Group,
+  lv_obj_t                *Widget,
+  LVGL_STATEMENT_CONTEXT  *Ctx
   )
 {
   lv_group_add_obj (Group, Widget);
-  lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY, NULL);
+  lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY, Ctx);
 }
 
 //
@@ -502,7 +654,7 @@ CreateCheckboxWidget (
     lv_obj_add_event_cb (Cb, OnCheckboxChanged, LV_EVENT_VALUE_CHANGED, Ctx);
   }
 
-  AddToNavGroup (Group, Cb);
+  AddToNavGroup (Group, Cb, Ctx);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -521,15 +673,17 @@ CreateNumericWidget (
   CHAR8                   *Text;
   lv_obj_t                *Row;
   lv_obj_t                *Label;
-  lv_obj_t                *Spinbox;
+  lv_obj_t                *Ta;
   EFI_IFR_NUMERIC         *NumOp;
   LVGL_STATEMENT_CONTEXT  *Ctx;
+  UINT64                  CurVal;
+  UINT64                  MinVal;
+  UINT64                  MaxVal;
+  CHAR8                   Initial[24];
+  CHAR8                   MaxStr[24];
 
   Text = GetPromptUtf8 (Statement, HiiHandle);
 
-  //
-  // Create a horizontal row: label + spinbox.
-  //
   Row = lv_obj_create (Parent);
   lv_obj_set_size (Row, LV_PCT (100), LV_SIZE_CONTENT);
   lv_obj_set_flex_flow (Row, LV_FLEX_FLOW_ROW);
@@ -541,40 +695,50 @@ CreateNumericWidget (
   lv_label_set_text (Label, Text != NULL ? Text : "Numeric");
   lv_obj_set_flex_grow (Label, 1);
 
-  Spinbox = lv_spinbox_create (Row);
-
   NumOp = (EFI_IFR_NUMERIC *)Statement->OpCode;
+  GetNumericRange (NumOp, &MinVal, &MaxVal);
+
   switch (NumOp->Flags & EFI_IFR_NUMERIC_SIZE) {
     case EFI_IFR_NUMERIC_SIZE_1:
-      lv_spinbox_set_range (Spinbox, (INT32)NumOp->data.u8.MinValue, (INT32)NumOp->data.u8.MaxValue);
-      lv_spinbox_set_value (Spinbox, (INT32)Statement->CurrentValue.Value.u8);
+      CurVal = Statement->CurrentValue.Value.u8;
       break;
     case EFI_IFR_NUMERIC_SIZE_2:
-      lv_spinbox_set_range (Spinbox, (INT32)NumOp->data.u16.MinValue, (INT32)NumOp->data.u16.MaxValue);
-      lv_spinbox_set_value (Spinbox, (INT32)Statement->CurrentValue.Value.u16);
+      CurVal = Statement->CurrentValue.Value.u16;
       break;
     case EFI_IFR_NUMERIC_SIZE_4:
-      lv_spinbox_set_range (Spinbox, (INT32)NumOp->data.u32.MinValue, (INT32)NumOp->data.u32.MaxValue);
-      lv_spinbox_set_value (Spinbox, (INT32)Statement->CurrentValue.Value.u32);
+      CurVal = Statement->CurrentValue.Value.u32;
       break;
     default:
-      lv_spinbox_set_range (Spinbox, 0, 0x7FFFFFFF);
-      lv_spinbox_set_value (Spinbox, (INT32)Statement->CurrentValue.Value.u64);
+      CurVal = Statement->CurrentValue.Value.u64;
       break;
   }
 
+  //
+  // A one-line textarea accepting only digits. Pressing ENTER fires
+  // LV_EVENT_READY, which OnNumericReady uses to commit.
+  //
+  Ta = lv_textarea_create (Row);
+  lv_textarea_set_one_line (Ta, true);
+  lv_textarea_set_accepted_chars (Ta, "0123456789");
+
+  Uint64ToAsciiDecimal (MaxVal, MaxStr, sizeof (MaxStr));
+  lv_textarea_set_max_length (Ta, (uint32_t)AsciiStrLen (MaxStr));
+
+  Uint64ToAsciiDecimal (CurVal, Initial, sizeof (Initial));
+  lv_textarea_set_text (Ta, Initial);
+
   if (Statement->Attribute & HII_DISPLAY_GRAYOUT) {
-    lv_obj_add_state (Spinbox, LV_STATE_DISABLED);
+    lv_obj_add_state (Ta, LV_STATE_DISABLED);
   }
 
   Ctx = AllocateZeroPool (sizeof (LVGL_STATEMENT_CONTEXT));
   if (Ctx != NULL) {
     Ctx->Statement = Statement;
-    Ctx->Widget    = Spinbox;
-    lv_obj_add_event_cb (Spinbox, OnStatementClicked, LV_EVENT_VALUE_CHANGED, Ctx);
+    Ctx->Widget    = Ta;
+    lv_obj_add_event_cb (Ta, OnNumericReady, LV_EVENT_READY, Ctx);
   }
 
-  AddToNavGroup (Group, Spinbox);
+  AddToNavGroup (Group, Ta, Ctx);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -675,7 +839,7 @@ CreateOneOfWidget (
     lv_obj_add_event_cb (Dd, OnDropdownChanged, LV_EVENT_VALUE_CHANGED, Ctx);
   }
 
-  AddToNavGroup (Group, Dd);
+  AddToNavGroup (Group, Dd, Ctx);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -833,7 +997,7 @@ CreateOrderedListWidget (
         lv_obj_add_event_cb (UpBtn, OnOrderedListMove, LV_EVENT_CLICKED, UpCtx);
       }
 
-      AddToNavGroup (Group, UpBtn);
+      AddToNavGroup (Group, UpBtn, NULL);
     }
 
     //
@@ -856,7 +1020,7 @@ CreateOrderedListWidget (
         lv_obj_add_event_cb (DownBtn, OnOrderedListMove, LV_EVENT_CLICKED, DownCtx);
       }
 
-      AddToNavGroup (Group, DownBtn);
+      AddToNavGroup (Group, DownBtn, NULL);
     }
   }
 
@@ -911,7 +1075,7 @@ CreateStringWidget (
     lv_obj_add_event_cb (Ta, OnStatementClicked, LV_EVENT_READY, Ctx);
   }
 
-  AddToNavGroup (Group, Ta);
+  AddToNavGroup (Group, Ta, Ctx);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -950,7 +1114,7 @@ CreateRefWidget (
     lv_obj_add_event_cb (Btn, OnStatementClicked, LV_EVENT_CLICKED, Ctx);
   }
 
-  AddToNavGroup (Group, Btn);
+  AddToNavGroup (Group, Btn, Ctx);
 
   if (Text != NULL) {
     FreePool (Text);
@@ -1105,11 +1269,6 @@ LvglRenderForm (
   lv_obj_set_style_pad_row (mSession.Screen, 6, 0);
 
   //
-  // Add an ESC key handler on the screen.
-  //
-  lv_obj_add_event_cb (mSession.Screen, OnEscPressed, LV_EVENT_KEY, NULL);
-
-  //
   // Title bar.
   //
   TitleStr16 = HiiGetString (FormData->HiiHandle, FormData->FormTitle, NULL);
@@ -1152,7 +1311,17 @@ LvglRenderForm (
       }
 
       if (lv_indev_get_type (Indev) == LV_INDEV_TYPE_KEYPAD) {
+        STATIC BOOLEAN  mFallbackInstalled = FALSE;
         lv_indev_set_group (Indev, mSession.Group);
+        //
+        // LvglRenderForm is called once per form transition. Only install the
+        // indev fallback key handler the first time, otherwise stale callbacks
+        // accumulate for the lifetime of LVGL.
+        //
+        if (!mFallbackInstalled) {
+          lv_indev_add_event_cb (Indev, OnIndevFallbackKey, LV_EVENT_KEY, NULL);
+          mFallbackInstalled = TRUE;
+        }
       }
     }
   }
@@ -1186,6 +1355,17 @@ LvglRenderForm (
       lv_tick_inc (10);
     }
   }
+
+  //
+  // We exit on a key PRESS event (ENTER to commit, ESC to leave). LVGL
+  // hasn't yet seen the matching RELEASE — without draining, LVGL would
+  // deliver the pending LV_EVENT_CLICKED to whatever widget is focused when
+  // FormDisplay() is re-invoked, triggering a spurious submenu navigation.
+  // lv_indev_wait_release() is NOT suitable here because it eats the entire
+  // next keystroke (it waits for a RELEASED poll, which swallows any new
+  // key the user presses before an idle poll).
+  //
+  lv_uefi_keypad_drain ();
 
   DEBUG ((DEBUG_INFO, "LvglRenderer: exiting event loop — Action=0x%x\n", UserInputData->Action));
 

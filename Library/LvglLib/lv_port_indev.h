@@ -37,6 +37,12 @@ void lv_port_indev_init(lv_display_t * disp);
 
 void lv_port_indev_close();
 
+/**
+  Drain the EFI keyboard buffer and reset the LVGL keypad indev state so that
+  no pending key-press leaks into the next event loop.
+**/
+void lv_uefi_keypad_drain(void);
+
 /**********************
  *      MACROS
  **********************/

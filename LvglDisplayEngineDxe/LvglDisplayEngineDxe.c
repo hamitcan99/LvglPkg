@@ -17,6 +17,7 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Protocol/DisplayProtocol.h>
+#include <Protocol/FormBrowserEx.h>
 #include "LvglFormRenderer.h"
 
 //
@@ -83,13 +84,13 @@ LvglConfirmDataChange (
   DEBUG ((DEBUG_INFO, "LvglDisplayEngine: ConfirmDataChange() called\n"));
 
   //
-  // TODO: Show LVGL dialog asking user to save/discard/cancel.
+  // TODO: Show LVGL save/discard/cancel dialog (Next Steps item).
   //
-
+  // For now, discard unsaved changes so ESC actually exits the form.
+  // BROWSER_ACTION_NONE = "cancel" — the browser re-renders and the user
+  // can never leave, so we must not return NONE here.
   //
-  // Default: discard unsaved changes.
-  //
-  return BROWSER_ACTION_NONE;
+  return BROWSER_ACTION_DISCARD;
 }
 
 /**

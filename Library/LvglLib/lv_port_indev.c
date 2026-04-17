@@ -462,6 +462,34 @@ void lv_port_indev_init(lv_display_t * disp)
     }
 }
 
+void lv_uefi_keypad_drain(void)
+{
+  EFI_STATUS                         Status;
+  EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL  *TxtInEx;
+  EFI_KEY_DATA                       KeyData;
+  lv_indev_t                         *Indev;
+
+  //
+  // Drain all pending keystrokes from the EFI console.
+  //
+  Status = gBS->HandleProtocol (gST->ConsoleInHandle, &gEfiSimpleTextInputExProtocolGuid, (VOID **)&TxtInEx);
+  if (!EFI_ERROR (Status)) {
+    while (!EFI_ERROR (TxtInEx->ReadKeyStrokeEx (TxtInEx, &KeyData))) {
+    }
+  }
+
+  //
+  // Force every keypad indev to RELEASED so LVGL doesn't interpret the
+  // pending ENTER release as a click on the next focused widget.
+  //
+  Indev = NULL;
+  while ((Indev = lv_indev_get_next (Indev)) != NULL) {
+    if (lv_indev_get_type (Indev) == LV_INDEV_TYPE_KEYPAD) {
+      Indev->keypad.last_state = LV_INDEV_STATE_RELEASED;
+    }
+  }
+}
+
 void lv_port_indev_close()
 {
   if (mPointerNotifyEvent != NULL) {
