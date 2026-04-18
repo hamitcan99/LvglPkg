@@ -83,14 +83,7 @@ LvglConfirmDataChange (
 {
   DEBUG ((DEBUG_INFO, "LvglDisplayEngine: ConfirmDataChange() called\n"));
 
-  //
-  // TODO: Show LVGL save/discard/cancel dialog (Next Steps item).
-  //
-  // For now, discard unsaved changes so ESC actually exits the form.
-  // BROWSER_ACTION_NONE = "cancel" — the browser re-renders and the user
-  // can never leave, so we must not return NONE here.
-  //
-  return BROWSER_ACTION_DISCARD;
+  return (UINTN)LvglRunConfirmPopup ();
 }
 
 /**
@@ -126,9 +119,33 @@ LvglDisplayEngineInit (
                   );
   ASSERT_EFI_ERROR (Status);
 
-  DEBUG ((DEBUG_INFO, "LvglDisplayEngine: protocol installed — %r\n", Status));
+  //
+  // Register F10 (Save) and F9 (Load Defaults) hotkeys, mirroring the
+  // original DisplayEngineDxe that we replace. Without this, HotKeyListHead
+  // is empty and F9/F10 have no effect.
+  //
+  {
+    EDKII_FORM_BROWSER_EXTENSION_PROTOCOL  *FormBrowserEx;
+    EFI_INPUT_KEY                          HotKey;
 
-  return Status;
+    Status = gBS->LocateProtocol (
+                    &gEdkiiFormBrowserExProtocolGuid,
+                    NULL,
+                    (VOID **)&FormBrowserEx
+                    );
+    if (!EFI_ERROR (Status)) {
+      HotKey.UnicodeChar = CHAR_NULL;
+      HotKey.ScanCode    = SCAN_F10;
+      FormBrowserEx->RegisterHotKey (&HotKey, BROWSER_ACTION_SUBMIT, 0, L"F10=Save");
+
+      HotKey.ScanCode = SCAN_F9;
+      FormBrowserEx->RegisterHotKey (&HotKey, BROWSER_ACTION_DEFAULT, 0, L"F9=Load Defaults");
+    }
+  }
+
+  DEBUG ((DEBUG_INFO, "LvglDisplayEngine: protocol installed\n"));
+
+  return EFI_SUCCESS;
 }
 
 /**

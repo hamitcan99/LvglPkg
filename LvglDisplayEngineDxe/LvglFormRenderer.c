@@ -17,8 +17,23 @@ STATIC LVGL_FORM_SESSION  mSession;
 STATIC BOOLEAN            mLvglReady = FALSE;
 
 //
+// Popup state — shared by the F10 in-loop overlay and LvglRunConfirmPopup.
+//
+#define LVGL_POPUP_PENDING  0xFFFFFFFFU
+
+STATIC UINT32     mPopupResult       = LVGL_POPUP_PENDING;
+STATIC lv_obj_t  *mPopupOverlay      = NULL;
+STATIC lv_obj_t  *mPopupFirstObj     = NULL;
+STATIC lv_obj_t  *mPopupLastObj      = NULL;
+STATIC UINT32     mPopupConfirmAction = 0;
+STATIC UINT16     mPendingDefaultId   = 0;
+STATIC UINT32     mDiscardAction      = BROWSER_ACTION_DISCARD;
+STATIC UINT32     mNoneAction         = BROWSER_ACTION_NONE;
+
+//
 // Forward declarations for widget builders.
 //
+STATIC VOID ShowPopup (lv_group_t *Group, CONST CHAR8 *Title, CONST CHAR8 *ConfirmLabel, UINT32 ConfirmAction, BOOLEAN ShowDiscard);
 STATIC VOID CreateSubtitleWidget      (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
 STATIC VOID CreateTextWidget          (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle);
 STATIC VOID CreateCheckboxWidget      (lv_obj_t *Parent, FORM_DISPLAY_ENGINE_STATEMENT *Statement, EFI_HII_HANDLE HiiHandle, lv_group_t *Group);
@@ -216,6 +231,98 @@ OnStatementClicked (
 }
 
 /**
+  String textarea commit — fires on LV_EVENT_READY (Enter key).
+  Reads the typed UTF-8 text, converts to UTF-16, fills InputValue.Buffer,
+  and registers a new HII string so SetupBrowserDxe can persist the value.
+**/
+STATIC
+VOID
+OnStringReady (
+  lv_event_t  *Event
+  )
+{
+  LVGL_STATEMENT_CONTEXT  *Ctx;
+  lv_obj_t                *Ta;
+  CONST CHAR8             *Utf8Text;
+  CHAR16                  *Str16;
+  CHAR16                  *PoolBuf;
+  UINTN                   SrcLen;
+  UINTN                   BufBytes;
+  UINTN                   MaxChars;
+  UINTN                   CopyChars;
+  UINTN                   Idx;
+  EFI_IFR_STRING          *StringOp;
+  EFI_STRING_ID           NewStringId;
+
+  Ctx = (LVGL_STATEMENT_CONTEXT *)lv_event_get_user_data (Event);
+  if ((Ctx == NULL) || (mSession.UserInput == NULL)) {
+    return;
+  }
+
+  Ta       = lv_event_get_target_obj (Event);
+  Utf8Text = lv_textarea_get_text (Ta);
+  if (Utf8Text == NULL) {
+    Utf8Text = "";
+  }
+
+  SrcLen = AsciiStrLen (Utf8Text);
+  Str16  = AllocateZeroPool ((SrcLen + 1) * sizeof (CHAR16));
+  if (Str16 == NULL) {
+    return;
+  }
+
+  for (Idx = 0; Idx < SrcLen; Idx++) {
+    Str16[Idx] = (CHAR16)(UINT8)Utf8Text[Idx];
+  }
+
+  Str16[SrcLen] = L'\0';
+
+  //
+  // SetupBrowserDxe Presentation.c does:
+  //   CopyMem (Statement->BufferValue, InputValue.Buffer, InputValue.BufferLen);
+  //   FreePool (InputValue.Buffer);
+  // so Buffer must be a real pool allocation sized to the field's StorageWidth,
+  // which SetupBrowser copies into CurrentValue.BufferLen when building the
+  // display statement. Fall back to EFI_IFR_STRING.MaxSize if BufferLen is 0.
+  //
+  BufBytes = Ctx->Statement->CurrentValue.BufferLen;
+  if (BufBytes == 0) {
+    StringOp = (EFI_IFR_STRING *)Ctx->Statement->OpCode;
+    BufBytes  = (UINTN)StringOp->MaxSize * sizeof (CHAR16);
+  }
+
+  if (BufBytes < sizeof (CHAR16)) {
+    FreePool (Str16);
+    return;
+  }
+
+  PoolBuf = AllocateZeroPool (BufBytes);
+  if (PoolBuf == NULL) {
+    FreePool (Str16);
+    return;
+  }
+
+  MaxChars  = (BufBytes / sizeof (CHAR16)) - 1;
+  CopyChars = (SrcLen < MaxChars) ? SrcLen : MaxChars;
+  CopyMem (PoolBuf, Str16, CopyChars * sizeof (CHAR16));
+
+  NewStringId = HiiSetString (mSession.FormData->HiiHandle, 0, Str16, NULL);
+  FreePool (Str16);
+  if (NewStringId == 0) {
+    FreePool (PoolBuf);
+    return;
+  }
+
+  mSession.UserInput->SelectedStatement       = Ctx->Statement;
+  mSession.UserInput->InputValue.Type         = EFI_IFR_TYPE_STRING;
+  mSession.UserInput->InputValue.Buffer       = (UINT8 *)PoolBuf;
+  mSession.UserInput->InputValue.BufferLen    = (UINT16)BufBytes;
+  mSession.UserInput->InputValue.Value.string = NewStringId;
+  mSession.UserInput->Action                  = 0;
+  mSession.ExitRequested                      = TRUE;
+}
+
+/**
   Checkbox value-changed handler — toggles the boolean and records it.
 **/
 STATIC
@@ -277,11 +384,28 @@ OnDropdownChanged (
     if (CurIdx == SelIdx) {
       mSession.UserInput->SelectedStatement = Ctx->Statement;
       mSession.UserInput->InputValue.Type   = Option->OptionOpCode->Type;
-      CopyMem (
-        &mSession.UserInput->InputValue.Value,
-        &Option->OptionOpCode->Value,
-        sizeof (EFI_IFR_TYPE_VALUE)
-        );
+      //
+      // Zero the union first, then copy only the type-appropriate bytes.
+      // The IFR binary stores Value at its native width; reading the full
+      // sizeof(EFI_IFR_TYPE_VALUE) would read into the next IFR opcode.
+      //
+      ZeroMem (&mSession.UserInput->InputValue.Value, sizeof (EFI_IFR_TYPE_VALUE));
+      switch (Option->OptionOpCode->Type) {
+        case EFI_IFR_TYPE_NUM_SIZE_8:
+          mSession.UserInput->InputValue.Value.u8  = Option->OptionOpCode->Value.u8;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_16:
+          mSession.UserInput->InputValue.Value.u16 = Option->OptionOpCode->Value.u16;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_32:
+          mSession.UserInput->InputValue.Value.u32 = Option->OptionOpCode->Value.u32;
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_64:
+          mSession.UserInput->InputValue.Value.u64 = Option->OptionOpCode->Value.u64;
+          break;
+        default:
+          break;
+      }
       mSession.UserInput->Action = 0;
       mSession.ExitRequested     = TRUE;
       return;
@@ -340,6 +464,255 @@ OnOrderedListMove (
 }
 
 /**
+  Popup button click handler — records the chosen action and dismisses overlay.
+**/
+STATIC
+VOID
+OnPopupBtn (
+  lv_event_t  *Event
+  )
+{
+  UINT32  *ActionPtr;
+
+  ActionPtr    = (UINT32 *)lv_event_get_user_data (Event);
+  mPopupResult = (ActionPtr != NULL) ? *ActionPtr : BROWSER_ACTION_NONE;
+
+  if (mPopupOverlay != NULL) {
+    lv_obj_delete (mPopupOverlay);
+    mPopupOverlay = NULL;
+    mPopupFirstObj = NULL;
+    mPopupLastObj  = NULL;
+  }
+}
+
+/**
+  Popup keyboard navigation handler.
+  - ESC: dismiss popup (cancel).
+  - UP/LEFT / DOWN/RIGHT: cycle through popup buttons without escaping to form.
+**/
+STATIC
+VOID
+OnPopupKey (
+  lv_event_t  *Event
+  )
+{
+  lv_key_t  Key;
+  lv_obj_t  *Focused;
+
+  Key = lv_indev_get_key (lv_indev_active ());
+
+  if (Key == LV_KEY_ESC) {
+    mPopupResult = BROWSER_ACTION_NONE;
+    if (mPopupOverlay != NULL) {
+      lv_obj_delete (mPopupOverlay);
+      mPopupOverlay  = NULL;
+      mPopupFirstObj = NULL;
+      mPopupLastObj  = NULL;
+    }
+
+    lv_event_stop_processing (Event);
+    return;
+  }
+
+  if ((Key == LV_KEY_LEFT) || (Key == LV_KEY_UP)) {
+    Focused = lv_group_get_focused (mSession.Group);
+    if (Focused != mPopupFirstObj) {
+      lv_group_focus_prev (mSession.Group);
+    }
+
+    lv_event_stop_processing (Event);
+  } else if ((Key == LV_KEY_RIGHT) || (Key == LV_KEY_DOWN)) {
+    Focused = lv_group_get_focused (mSession.Group);
+    if (Focused != mPopupLastObj) {
+      lv_group_focus_next (mSession.Group);
+    }
+
+    lv_event_stop_processing (Event);
+  }
+}
+
+/**
+  Create a modal confirmation popup on top of the current screen.
+
+  Buttons are added to @a Group so keyboard navigation stays within the popup.
+  The confirm button uses @a ConfirmAction as its result value.
+  If @a ShowDiscard is TRUE a third "Discard" button is shown (for the
+  "unsaved changes" scenario where the user can choose to throw away edits).
+**/
+STATIC
+VOID
+ShowPopup (
+  IN lv_group_t  *Group,
+  IN CONST CHAR8  *Title,
+  IN CONST CHAR8  *ConfirmLabel,
+  IN UINT32        ConfirmAction,
+  IN BOOLEAN       ShowDiscard
+  )
+{
+  lv_obj_t  *Overlay;
+  lv_obj_t  *Card;
+  lv_obj_t  *TitleLbl;
+  lv_obj_t  *MsgLbl;
+  lv_obj_t  *Sep;
+  lv_obj_t  *BtnRow;
+  lv_obj_t  *ConfirmBtn;
+  lv_obj_t  *DiscardBtn;
+  lv_obj_t  *CancelBtn;
+  lv_obj_t  *Lbl;
+
+  mPopupConfirmAction = ConfirmAction;
+  mPopupResult        = LVGL_POPUP_PENDING;
+
+  //
+  // Semi-transparent full-screen overlay that blocks clicks on form widgets.
+  //
+  Overlay = lv_obj_create (lv_screen_active ());
+  lv_obj_set_size (Overlay, LV_PCT (100), LV_PCT (100));
+  lv_obj_set_style_bg_color (Overlay, lv_color_black (), 0);
+  lv_obj_set_style_bg_opa (Overlay, LV_OPA_50, 0);
+  lv_obj_set_style_border_width (Overlay, 0, 0);
+  lv_obj_set_style_pad_all (Overlay, 0, 0);
+  lv_obj_set_flex_flow (Overlay, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align (Overlay, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  mPopupOverlay = Overlay;
+
+  //
+  // Dialog card.
+  //
+  Card = lv_obj_create (Overlay);
+  lv_obj_set_width (Card, LV_PCT (50));
+  lv_obj_set_height (Card, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow (Card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all (Card, 16, 0);
+  lv_obj_set_style_pad_row (Card, 10, 0);
+  lv_obj_set_style_bg_color (Card, lv_color_hex (0x2A2A4A), 0);
+  lv_obj_set_style_radius (Card, 8, 0);
+  lv_obj_set_style_border_width (Card, 0, 0);
+
+  TitleLbl = lv_label_create (Card);
+  lv_label_set_text (TitleLbl, Title);
+  lv_obj_set_style_text_font (TitleLbl, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color (TitleLbl, lv_color_white (), 0);
+
+  Sep = lv_obj_create (Card);
+  lv_obj_set_size (Sep, LV_PCT (100), 1);
+  lv_obj_set_style_bg_color (Sep, lv_color_hex (0x555580), 0);
+  lv_obj_set_style_border_width (Sep, 0, 0);
+  lv_obj_set_style_pad_all (Sep, 0, 0);
+
+  MsgLbl = lv_label_create (Card);
+  lv_label_set_text (MsgLbl, ShowDiscard ? "You have unsaved changes." : "Save the current settings?");
+  lv_obj_set_style_text_color (MsgLbl, lv_color_hex (0xCCCCCC), 0);
+
+  BtnRow = lv_obj_create (Card);
+  lv_obj_set_size (BtnRow, LV_PCT (100), LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow (BtnRow, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align (BtnRow, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_all (BtnRow, 0, 0);
+  lv_obj_set_style_border_width (BtnRow, 0, 0);
+  lv_obj_set_style_bg_opa (BtnRow, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_pad_column (BtnRow, 8, 0);
+
+  //
+  // Confirm (Save / Load) button.
+  //
+  ConfirmBtn = lv_btn_create (BtnRow);
+  Lbl        = lv_label_create (ConfirmBtn);
+  lv_label_set_text (Lbl, ConfirmLabel);
+  lv_obj_add_event_cb (ConfirmBtn, OnPopupBtn, LV_EVENT_CLICKED, &mPopupConfirmAction);
+  lv_obj_add_event_cb (ConfirmBtn, OnPopupKey, LV_EVENT_KEY, NULL);
+  lv_group_add_obj (Group, ConfirmBtn);
+  lv_group_focus_obj (ConfirmBtn);
+  mPopupFirstObj = ConfirmBtn;
+
+  //
+  // Optional Discard button (shown for "unsaved changes" popup only).
+  //
+  if (ShowDiscard) {
+    DiscardBtn = lv_btn_create (BtnRow);
+    Lbl        = lv_label_create (DiscardBtn);
+    lv_label_set_text (Lbl, "Discard");
+    lv_obj_add_event_cb (DiscardBtn, OnPopupBtn, LV_EVENT_CLICKED, &mDiscardAction);
+    lv_obj_add_event_cb (DiscardBtn, OnPopupKey, LV_EVENT_KEY, NULL);
+    lv_group_add_obj (Group, DiscardBtn);
+    mPopupLastObj = DiscardBtn;
+  }
+
+  //
+  // Cancel button.
+  //
+  CancelBtn = lv_btn_create (BtnRow);
+  Lbl       = lv_label_create (CancelBtn);
+  lv_label_set_text (Lbl, "Cancel");
+  lv_obj_add_event_cb (CancelBtn, OnPopupBtn, LV_EVENT_CLICKED, &mNoneAction);
+  lv_obj_add_event_cb (CancelBtn, OnPopupKey, LV_EVENT_KEY, NULL);
+  lv_group_add_obj (Group, CancelBtn);
+  mPopupLastObj = CancelBtn;
+}
+
+/**
+  Walk HotKeyListHead for an F-key match and set UserInput->Action if found.
+  Returns TRUE if a hotkey was matched and the event loop should exit.
+**/
+STATIC
+BOOLEAN
+HandleFunctionKey (
+  IN UINT32  LvKey
+  )
+{
+  UINT16           ScanCode;
+  LIST_ENTRY       *Link;
+  BROWSER_HOT_KEY  *HotKey;
+
+  if ((LvKey < LV_KEY_F1) || (LvKey > LV_KEY_F12)) {
+    return FALSE;
+  }
+
+  if (IsListEmpty (&mSession.FormData->HotKeyListHead)) {
+    return FALSE;
+  }
+
+  ScanCode = (UINT16)(SCAN_F1 + (LvKey - LV_KEY_F1));
+
+  for (Link = mSession.FormData->HotKeyListHead.ForwardLink;
+       Link != &mSession.FormData->HotKeyListHead;
+       Link = Link->ForwardLink)
+  {
+    HotKey = BROWSER_HOT_KEY_FROM_LINK (Link);
+    if ((HotKey->KeyData != NULL) &&
+        (HotKey->KeyData->ScanCode == ScanCode) &&
+        (HotKey->KeyData->UnicodeChar == CHAR_NULL))
+    {
+      //
+      // For actions that modify settings (Save / Load Defaults), show a
+      // confirmation popup instead of immediately exiting. The main event
+      // loop processes mPopupResult once the user dismisses the dialog.
+      // For other actions (Reset, Exit) execute immediately.
+      //
+      if ((HotKey->Action & (BROWSER_ACTION_SUBMIT | BROWSER_ACTION_DEFAULT)) != 0) {
+        if (mPopupOverlay == NULL) {
+          CONST CHAR8  *Title = ((HotKey->Action & BROWSER_ACTION_DEFAULT) != 0)
+                                  ? "Load Defaults?" : "Save Changes?";
+          CONST CHAR8  *Label = ((HotKey->Action & BROWSER_ACTION_DEFAULT) != 0)
+                                  ? "Load" : "Save";
+          mPendingDefaultId = HotKey->DefaultId;
+          ShowPopup (mSession.Group, Title, Label, HotKey->Action, FALSE);
+        }
+      } else {
+        mSession.UserInput->Action            = HotKey->Action;
+        mSession.UserInput->DefaultId         = HotKey->DefaultId;
+        mSession.UserInput->SelectedStatement = NULL;
+        mSession.ExitRequested                = TRUE;
+      }
+
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
   Indev-level ESC fallback — LVGL only routes LV_EVENT_KEY to a focused widget,
   so forms with no focusable items (e.g. an empty Driver Health Manager form)
   would eat ESC. This handler runs on every keypress the indev produces, and
@@ -357,6 +730,13 @@ OnIndevFallbackKey (
   Indev = lv_indev_active ();
   Key   = lv_indev_get_key (Indev);
 
+  //
+  // Popup is open — OnPopupKey handles all keys for popup buttons.
+  //
+  if (mPopupOverlay != NULL) {
+    return;
+  }
+
   if ((mSession.Group != NULL) && (lv_group_get_focused (mSession.Group) != NULL)) {
     //
     // A widget has focus — OnNavKey will handle the key.
@@ -368,7 +748,10 @@ OnIndevFallbackKey (
     mSession.UserInput->Action            = BROWSER_ACTION_FORM_EXIT;
     mSession.UserInput->SelectedStatement = NULL;
     mSession.ExitRequested                = TRUE;
+    return;
   }
+
+  HandleFunctionKey (Key);
 }
 
 STATIC
@@ -521,6 +904,13 @@ OnNavKey (
   Editing = lv_group_get_editing (mSession.Group);
   Ctx     = (LVGL_STATEMENT_CONTEXT *)lv_event_get_user_data (Event);
 
+  //
+  // Defer all key handling to OnPopupKey when a popup is visible.
+  //
+  if (mPopupOverlay != NULL) {
+    return;
+  }
+
   if (Key == LV_KEY_ESC) {
     if (Editing) {
       lv_group_set_editing (mSession.Group, false);
@@ -530,6 +920,11 @@ OnNavKey (
       mSession.ExitRequested                = TRUE;
     }
 
+    lv_event_stop_processing (Event);
+    return;
+  }
+
+  if (HandleFunctionKey (Key)) {
     lv_event_stop_processing (Event);
     return;
   }
@@ -550,11 +945,15 @@ OnNavKey (
     Focused = lv_group_get_focused (mSession.Group);
     if ((Focused != NULL) &&
         (lv_obj_check_type (Focused, &lv_dropdown_class) ||
-         lv_obj_check_type (Focused, &lv_textarea_class)))
+         lv_obj_check_type (Focused, &lv_spinbox_class)))
     {
       lv_group_set_editing (mSession.Group, true);
       lv_event_stop_processing (Event);
     }
+    //
+    // Textarea: do NOT intercept — Enter passes to the class handler,
+    // which fires LV_EVENT_READY → OnStringReady commits the value.
+    //
   }
 }
 
@@ -567,7 +966,7 @@ AddToNavGroup (
   )
 {
   lv_group_add_obj (Group, Widget);
-  lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY, Ctx);
+  lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY | LV_EVENT_PREPROCESS, Ctx);
 }
 
 //
@@ -815,10 +1214,34 @@ CreateOneOfWidget (
     }
 
     //
-    // Check if this option matches the current value.
+    // Match based on the type-appropriate field only.  The IFR binary stores
+    // EFI_IFR_ONE_OF_OPTION.Value at its native width, so reading the full
+    // sizeof(EFI_IFR_TYPE_VALUE) union would read into adjacent opcodes.
     //
-    if (CompareMem (&Option->OptionOpCode->Value, &Statement->CurrentValue.Value, sizeof (EFI_IFR_TYPE_VALUE)) == 0) {
-      SelectedIdx = CurIdx;
+    {
+      BOOLEAN  Match;
+
+      switch (Option->OptionOpCode->Type) {
+        case EFI_IFR_TYPE_NUM_SIZE_8:
+          Match = (Option->OptionOpCode->Value.u8 == Statement->CurrentValue.Value.u8);
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_16:
+          Match = (Option->OptionOpCode->Value.u16 == Statement->CurrentValue.Value.u16);
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_32:
+          Match = (Option->OptionOpCode->Value.u32 == Statement->CurrentValue.Value.u32);
+          break;
+        case EFI_IFR_TYPE_NUM_SIZE_64:
+          Match = (Option->OptionOpCode->Value.u64 == Statement->CurrentValue.Value.u64);
+          break;
+        default:
+          Match = FALSE;
+          break;
+      }
+
+      if (Match) {
+        SelectedIdx = CurIdx;
+      }
     }
 
     CurIdx++;
@@ -1039,6 +1462,8 @@ CreateStringWidget (
   )
 {
   CHAR8                   *Text;
+  CHAR16                  *CurStr16;
+  CHAR8                   *CurUtf8;
   lv_obj_t                *Row;
   lv_obj_t                *Label;
   lv_obj_t                *Ta;
@@ -1062,6 +1487,23 @@ CreateStringWidget (
 
   if (Statement->OpCode->OpCode == EFI_IFR_PASSWORD_OP) {
     lv_textarea_set_password_mode (Ta, true);
+  } else {
+    //
+    // For string fields the current value is stored as an HII string token
+    // in CurrentValue.Value.string — NOT in CurrentValue.Buffer (which is
+    // used only for buffer-type questions such as ordered lists).
+    //
+    if (Statement->CurrentValue.Value.string != 0) {
+      CurStr16 = HiiGetString (HiiHandle, Statement->CurrentValue.Value.string, NULL);
+      if (CurStr16 != NULL) {
+        CurUtf8 = Ucs2ToUtf8 (CurStr16);
+        FreePool (CurStr16);
+        if (CurUtf8 != NULL) {
+          lv_textarea_set_text (Ta, CurUtf8);
+          FreePool (CurUtf8);
+        }
+      }
+    }
   }
 
   if (Statement->Attribute & HII_DISPLAY_GRAYOUT) {
@@ -1072,7 +1514,8 @@ CreateStringWidget (
   if (Ctx != NULL) {
     Ctx->Statement = Statement;
     Ctx->Widget    = Ta;
-    lv_obj_add_event_cb (Ta, OnStatementClicked, LV_EVENT_READY, Ctx);
+    Ctx->HiiHandle = HiiHandle;
+    lv_obj_add_event_cb (Ta, OnStringReady, LV_EVENT_READY, Ctx);
   }
 
   AddToNavGroup (Group, Ta, Ctx);
@@ -1354,6 +1797,20 @@ LvglRenderForm (
     if (!mTickSupport) {
       lv_tick_inc (10);
     }
+
+    //
+    // Process popup result once the overlay has been dismissed.
+    //
+    if ((mPopupResult != LVGL_POPUP_PENDING) && (mPopupOverlay == NULL)) {
+      if (mPopupResult != BROWSER_ACTION_NONE) {
+        mSession.UserInput->Action            = mPopupResult;
+        mSession.UserInput->DefaultId         = mPendingDefaultId;
+        mSession.UserInput->SelectedStatement = NULL;
+        mSession.ExitRequested                = TRUE;
+      }
+
+      mPopupResult = LVGL_POPUP_PENDING;
+    }
   }
 
   //
@@ -1370,6 +1827,68 @@ LvglRenderForm (
   DEBUG ((DEBUG_INFO, "LvglRenderer: exiting event loop — Action=0x%x\n", UserInputData->Action));
 
   return EFI_SUCCESS;
+}
+
+UINTN
+EFIAPI
+LvglRunConfirmPopup (
+  VOID
+  )
+{
+  lv_group_t  *PopupGroup;
+  lv_indev_t  *Indev;
+  extern BOOLEAN  mTickSupport;
+
+  if (!mLvglReady) {
+    return BROWSER_ACTION_DISCARD;
+  }
+
+  //
+  // Create a dedicated navigation group for the popup so that the keyboard
+  // indev is isolated from the (now hidden) form group.
+  //
+  PopupGroup = lv_group_create ();
+
+  Indev = NULL;
+  while ((Indev = lv_indev_get_next (Indev)) != NULL) {
+    if (lv_indev_get_type (Indev) == LV_INDEV_TYPE_KEYPAD) {
+      lv_indev_set_group (Indev, PopupGroup);
+    }
+  }
+
+  ShowPopup (PopupGroup, "Unsaved Changes", "Save", BROWSER_ACTION_SUBMIT, TRUE);
+
+  //
+  // Drain pending keystrokes so the popup isn't dismissed accidentally.
+  //
+  lv_uefi_keypad_drain ();
+
+  while (mPopupResult == LVGL_POPUP_PENDING) {
+    lv_timer_handler ();
+    gBS->Stall (10 * 1000);
+    if (!mTickSupport) {
+      lv_tick_inc (10);
+    }
+  }
+
+  //
+  // Restore keyboard indev to the form group (still valid — ExitDisplay
+  // has not been called yet at this point in the browser flow).
+  //
+  Indev = NULL;
+  while ((Indev = lv_indev_get_next (Indev)) != NULL) {
+    if (lv_indev_get_type (Indev) == LV_INDEV_TYPE_KEYPAD) {
+      lv_indev_set_group (Indev, mSession.Group);
+    }
+  }
+
+  lv_group_delete (PopupGroup);
+
+  {
+    UINTN  Result  = (UINTN)mPopupResult;
+    mPopupResult   = LVGL_POPUP_PENDING;
+    return Result;
+  }
 }
 
 VOID

@@ -144,6 +144,19 @@ static void keypad_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
           data->key = LV_KEY_END;
           break;
 
+        case SCAN_F1:  data->key = LV_KEY_F1;  break;
+        case SCAN_F2:  data->key = LV_KEY_F2;  break;
+        case SCAN_F3:  data->key = LV_KEY_F3;  break;
+        case SCAN_F4:  data->key = LV_KEY_F4;  break;
+        case SCAN_F5:  data->key = LV_KEY_F5;  break;
+        case SCAN_F6:  data->key = LV_KEY_F6;  break;
+        case SCAN_F7:  data->key = LV_KEY_F7;  break;
+        case SCAN_F8:  data->key = LV_KEY_F8;  break;
+        case SCAN_F9:  data->key = LV_KEY_F9;  break;
+        case SCAN_F10: data->key = LV_KEY_F10; break;
+        case SCAN_F11: data->key = LV_KEY_F11; break;
+        case SCAN_F12: data->key = LV_KEY_F12; break;
+
         default:
           break;
         }

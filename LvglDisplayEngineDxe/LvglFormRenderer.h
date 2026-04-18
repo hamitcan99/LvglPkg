@@ -18,6 +18,7 @@
 #include <Library/HiiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Protocol/DisplayProtocol.h>
+#include <Protocol/FormBrowserEx.h>
 #include <Uefi/UefiInternalFormRepresentation.h>
 
 //
@@ -26,6 +27,7 @@
 typedef struct {
   FORM_DISPLAY_ENGINE_STATEMENT    *Statement;
   lv_obj_t                        *Widget;
+  EFI_HII_HANDLE                   HiiHandle;
 } LVGL_STATEMENT_CONTEXT;
 
 //
@@ -63,6 +65,20 @@ EFIAPI
 LvglRenderForm (
   IN  FORM_DISPLAY_ENGINE_FORM  *FormData,
   OUT USER_INPUT                *UserInputData
+  );
+
+/**
+  Show a save/discard/cancel confirmation popup and block until the user
+  chooses. Called from LvglConfirmDataChange() in LvglDisplayEngineDxe.c.
+
+  @return BROWSER_ACTION_SUBMIT   User chose Save.
+  @return BROWSER_ACTION_DISCARD  User chose Discard.
+  @return BROWSER_ACTION_NONE     User chose Cancel (stay in form).
+**/
+UINTN
+EFIAPI
+LvglRunConfirmPopup (
+  VOID
   );
 
 /**

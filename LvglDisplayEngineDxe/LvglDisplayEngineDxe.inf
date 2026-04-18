@@ -42,6 +42,7 @@
 [Protocols]
   gEdkiiFormDisplayEngineProtocolGuid   ## PRODUCES
   gEfiGraphicsOutputProtocolGuid        ## CONSUMES
+  gEdkiiFormBrowserExProtocolGuid       ## CONSUMES
 
 [Depex]
   gEfiHiiDatabaseProtocolGuid AND gEfiHiiConfigRoutingProtocolGuid AND gEfiGraphicsOutputProtocolGuid

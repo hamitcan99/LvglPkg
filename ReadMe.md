@@ -127,8 +127,7 @@ Press F2 or DEL at the OVMF splash screen to enter Setup — the LVGL-based form
 
 ## Current Status
 
-The initial `FormDisplay()` implementation is working: LVGL renders HII forms with widget mapping for all major IFR opcodes. Active development is focused on fixing input handling (mouse, keyboard navigation, ESC) and improving the visual theme.
-
+`FormDisplay()` is working end-to-end: LVGL renders HII forms graphically with widget mapping for all major IFR opcodes. Keyboard navigation (UP/DOWN focus, ENTER to edit, ESC to exit), mouse input, and string field value commits are all functional. Active development is focused on F-key hotkeys and the visual theme.
 
 ## TODO
 - [x] Absolute Pointer Mouse
@@ -140,9 +139,9 @@ The initial `FormDisplay()` implementation is working: LVGL renders HII forms wi
 - [x] Fix mouse in display engine (cursor lost on screen switch)
 - [x] Keyboard navigation (UP/DOWN focus, ESC exits form, ENTER toggles editing on spinbox/dropdown/textarea)
 - [x] `EFI_IFR_ORDERED_LIST_OP` renderer (Boot Order / Driver Order) — Up/Down buttons per entry, reorder committed via `USER_INPUT.InputValue.Buffer`
+- [x] String field value commit — `OnStringReady` allocates pool buffer (`AllocateZeroPool(CurrentValue.BufferLen)`) and calls `HiiSetString`; satisfies SetupBrowserDxe's `FreePool(InputValue.Buffer)` and `CopyMem(BufferValue, Buffer, BufferLen)` contract
 - [ ] Function-key hotkeys (F9 Load Defaults, F10 Save, driver-registered hotkeys from `HotKeyListHead`)
 - [ ] Theme/styling pass (fonts, colors, readability)
-- [ ] End-to-end form value editing and save/discard
 - [ ] File System
 - [ ] ~~VS2022~~/~~AARCH64-GCC~~/Clang
 - [ ] Code Clean(Remove Unused Source File in .inf)
