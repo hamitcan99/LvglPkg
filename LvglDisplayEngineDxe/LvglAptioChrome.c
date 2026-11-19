@@ -362,6 +362,38 @@ ScanCodeToChipKey (
 }
 
 /**
+  Return the text to show next to a hotkey chip.
+
+  Hotkey help strings follow the text-mode display engine's convention of
+  naming the key themselves ("F10=Save", as registered by this driver and by
+  other form-browser users). The chip already shows the key, so drop a
+  leading "<key>=" that repeats it; any other string is shown as is.
+**/
+STATIC
+CONST CHAR8 *
+HotKeyChipDescription (
+  IN CONST CHAR8  *KeyLabel,
+  IN CONST CHAR8  *HelpString  OPTIONAL
+  )
+{
+  UINTN  KeyLen;
+
+  if (HelpString == NULL) {
+    return "";
+  }
+
+  KeyLen = AsciiStrLen (KeyLabel);
+  if ((AsciiStrnCmp (HelpString, KeyLabel, KeyLen) == 0) &&
+      (HelpString[KeyLen] == '=') &&
+      (HelpString[KeyLen + 1] != '\0'))
+  {
+    return HelpString + KeyLen + 1;
+  }
+
+  return HelpString;
+}
+
+/**
   Build the footer: chip row of registered hotkeys plus standard nav chips.
 **/
 STATIC
@@ -430,7 +462,7 @@ BuildFooter (
         continue;
       }
       Utf8 = ChromeUcs2ToUtf8 (HotKey->HelpString);
-      AddHotKeyChip (Bar, KeyLabel, Utf8 != NULL ? Utf8 : "");
+      AddHotKeyChip (Bar, KeyLabel, HotKeyChipDescription (KeyLabel, Utf8));
       if (Utf8 != NULL) {
         FreePool (Utf8);
       }
