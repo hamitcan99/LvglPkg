@@ -494,7 +494,7 @@ OnTextareaFocused (
     mSession.OnScreenKb,
     IsNumeric ? LV_KEYBOARD_MODE_NUMBER : LV_KEYBOARD_MODE_TEXT_LOWER
     );
-  lv_obj_clear_flag (mSession.OnScreenKb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden (mSession.OnScreenKb, false);
   lv_obj_move_foreground (mSession.OnScreenKb);
   lv_obj_scroll_to_view (Ta, LV_ANIM_OFF);
 }
@@ -510,7 +510,7 @@ OnTextareaDefocused (
   }
 
   (VOID)Event;
-  lv_obj_add_flag (mSession.OnScreenKb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden (mSession.OnScreenKb, true);
   lv_keyboard_set_textarea (mSession.OnScreenKb, NULL);
 }
 
@@ -525,7 +525,7 @@ OnKeyboardCancel (
   }
 
   (VOID)Event;
-  lv_obj_add_flag (mSession.OnScreenKb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden (mSession.OnScreenKb, true);
   lv_keyboard_set_textarea (mSession.OnScreenKb, NULL);
 }
 
@@ -927,7 +927,7 @@ ShowPopup (
   //
   // Confirm (Save / Load) button.
   //
-  ConfirmBtn = lv_btn_create (Shell.BtnRow);
+  ConfirmBtn = lv_button_create (Shell.BtnRow);
   Lbl        = lv_label_create (ConfirmBtn);
   {
     CHAR8  ConfirmText[64];
@@ -945,7 +945,7 @@ ShowPopup (
   // Optional Discard button (shown for "unsaved changes" popup only).
   //
   if (ShowDiscard) {
-    DiscardBtn = lv_btn_create (Shell.BtnRow);
+    DiscardBtn = lv_button_create (Shell.BtnRow);
     Lbl        = lv_label_create (DiscardBtn);
     lv_label_set_text (Lbl, "Discard (N)");
     LvglThemeStyleButtonLabel (DiscardBtn, Lbl);
@@ -958,7 +958,7 @@ ShowPopup (
   //
   // Cancel button.
   //
-  CancelBtn = lv_btn_create (Shell.BtnRow);
+  CancelBtn = lv_button_create (Shell.BtnRow);
   Lbl       = lv_label_create (CancelBtn);
   lv_label_set_text (Lbl, "Cancel (Esc)");
   LvglThemeStyleButtonLabel (CancelBtn, Lbl);
@@ -2120,7 +2120,7 @@ AddToNavGroup (
   )
 {
   lv_group_add_obj (Group, Widget);
-  lv_obj_remove_flag (Widget, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scroll_on_focus (Widget, false);
   lv_obj_add_event_cb (Widget, OnNavFocused, LV_EVENT_FOCUSED, NULL);
   lv_obj_add_event_cb (Widget, OnNavKey, LV_EVENT_KEY | LV_EVENT_PREPROCESS, Ctx);
   if (Ctx != NULL) {
@@ -2151,7 +2151,7 @@ StyleRow (
 {
   lv_obj_set_size (Row, LV_PCT (100), LV_SIZE_CONTENT);
   lv_obj_set_flex_flow (Row, LV_FLEX_FLOW_ROW);
-  lv_obj_clear_flag (Row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable (Row, false);
 
   // default: panel-tinted capsule
   lv_obj_set_style_bg_color (Row, lv_color_hex (THEME_COLOR_ROW_BG), 0);
@@ -3128,7 +3128,7 @@ CreateOrderedListWidget (
     //
     // Up button.
     //
-    UpBtn    = lv_btn_create (Row);
+    UpBtn    = lv_button_create (Row);
     BtnLabel = lv_label_create (UpBtn);
     lv_label_set_text (BtnLabel, LV_SYMBOL_UP);
     LvglThemeStyleButtonLabel (UpBtn, BtnLabel);
@@ -3152,7 +3152,7 @@ CreateOrderedListWidget (
     //
     // Down button.
     //
-    DownBtn  = lv_btn_create (Row);
+    DownBtn  = lv_button_create (Row);
     BtnLabel = lv_label_create (DownBtn);
     lv_label_set_text (BtnLabel, LV_SYMBOL_DOWN);
     LvglThemeStyleButtonLabel (DownBtn, BtnLabel);
@@ -3283,7 +3283,7 @@ CreateRefWidget (
 
   Text = GetPromptUtf8 (Statement, HiiHandle);
 
-  Btn = lv_btn_create (Parent);
+  Btn = lv_button_create (Parent);
   StyleRow (Btn);
   lv_obj_set_style_text_align (Btn, LV_TEXT_ALIGN_LEFT, 0);
 
@@ -3566,7 +3566,7 @@ LvglRenderForm (
   lv_obj_set_size (mSession.OnScreenKb, LV_PCT (100), LV_PCT (40));
   lv_obj_align (mSession.OnScreenKb, LV_ALIGN_BOTTOM_MID, 0, 0);
   LvglThemeStyleKeyboard (mSession.OnScreenKb);
-  lv_obj_add_flag (mSession.OnScreenKb, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_hidden (mSession.OnScreenKb, true);
   lv_obj_add_event_cb (mSession.OnScreenKb, OnKeyboardCancel, LV_EVENT_CANCEL, NULL);
   //
   // Don't add the keyboard to the form's nav group: it's mouse-only.
@@ -3813,7 +3813,7 @@ AddHiiPopupButton (
   lv_obj_t  *Btn;
   lv_obj_t  *Lbl;
 
-  Btn = lv_btn_create (Row);
+  Btn = lv_button_create (Row);
   Lbl = lv_label_create (Btn);
   lv_label_set_text (Lbl, Label);
   LvglThemeStyleButtonLabel (Btn, Lbl);

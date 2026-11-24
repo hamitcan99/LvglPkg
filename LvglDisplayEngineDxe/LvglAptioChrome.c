@@ -124,7 +124,7 @@ BuildHeader (
   lv_obj_set_style_pad_right (Bar, THEME_PAD_HEADER_X, 0);
   lv_obj_set_style_pad_top (Bar, 0, 0);
   lv_obj_set_style_pad_bottom (Bar, 0, 0);
-  lv_obj_clear_flag (Bar, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable (Bar, false);
 
   // Left: brand title
   Title = lv_label_create (Bar);
@@ -256,7 +256,7 @@ BuildSubtitleBar (
   lv_obj_set_style_pad_right (Bar, THEME_PAD_SUBTITLE_X, 0);
   lv_obj_set_style_pad_top (Bar, 0, 0);
   lv_obj_set_style_pad_bottom (Bar, 0, 0);
-  lv_obj_clear_flag (Bar, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable (Bar, false);
 
   Str16 = NULL;
   Utf8  = NULL;
@@ -319,7 +319,7 @@ AddHotKeyChip (
   lv_obj_set_style_radius (Chip, THEME_RADIUS_CHIP, 0);
   lv_obj_set_style_bg_color (Chip, lv_color_hex (THEME_COLOR_BG_PANEL), 0);
   lv_obj_set_style_bg_opa (Chip, LV_OPA_COVER, 0);
-  lv_obj_clear_flag (Chip, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable (Chip, false);
 
   KeyLbl = lv_label_create (Chip);
   lv_label_set_text (KeyLbl, KeyText);
@@ -389,7 +389,7 @@ BuildFooter (
   lv_obj_set_style_pad_column (Bar, THEME_PAD_FOOTER_COL_GAP, 0);
   lv_obj_set_flex_flow (Bar, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align (Bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag (Bar, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollable (Bar, false);
 
   //
   // "Unsaved changes" notice -- prepended when any question on the form
@@ -467,7 +467,7 @@ AptioBuildChrome (
     lv_obj_set_style_bg_color (Screen, lv_color_hex (THEME_COLOR_BACKDROP), 0);
     lv_obj_set_style_bg_opa (Screen, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all (Screen, 0, 0);
-    lv_obj_clear_flag (Screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable (Screen, false);
 
     HorRes = LV_HOR_RES;
     VerRes = LV_VER_RES;
@@ -501,7 +501,7 @@ AptioBuildChrome (
     lv_obj_set_flex_flow (Frame, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all (Frame, 0, 0);
     lv_obj_set_style_pad_row (Frame, 0, 0);
-    lv_obj_clear_flag (Frame, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable (Frame, false);
 
     ChromeRoot = Frame;
   } else {
@@ -521,7 +521,7 @@ AptioBuildChrome (
     lv_obj_set_flex_flow (Screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all (Screen, 0, 0);
     lv_obj_set_style_pad_row (Screen, 0, 0);
-    lv_obj_clear_flag (Screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable (Screen, false);
   }
 
   // Header / subtitle / [content row | help pane] / footer in flex order.
@@ -546,7 +546,7 @@ AptioBuildChrome (
     lv_obj_set_style_pad_all (Middle, 0, 0);
     lv_obj_set_style_pad_column (Middle, 0, 0);
     lv_obj_set_style_bg_opa (Middle, LV_OPA_TRANSP, 0);
-    lv_obj_clear_flag (Middle, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable (Middle, false);
 
     // Left: scrollable form rows (transparent column).
     Content = lv_obj_create (Middle);
@@ -560,9 +560,9 @@ AptioBuildChrome (
     lv_obj_set_style_pad_bottom (Content, THEME_PAD_CONTENT_Y, 0);
     lv_obj_set_style_pad_row (Content, THEME_PAD_CONTENT_ROW_GAP, 0);
     lv_obj_set_style_bg_opa (Content, LV_OPA_TRANSP, 0);
-    lv_obj_add_flag (Content, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag (Content, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_clear_flag (Content, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_set_scrollable (Content, true);
+    lv_obj_set_scroll_elastic (Content, false);
+    lv_obj_set_scroll_momentum (Content, false);
     LvglThemeApplyBodyFont (Content);
 
     // Right: help pane (percentage width). Header label "Help" + body label.
@@ -580,7 +580,7 @@ AptioBuildChrome (
     lv_obj_set_style_pad_bottom (HelpPane, THEME_PAD_HELPPANE_Y, 0);
     lv_obj_set_style_pad_row (HelpPane, THEME_PAD_HELPPANE_ROW_GAP, 0);
     lv_obj_set_flex_flow (HelpPane, LV_FLEX_FLOW_COLUMN);
-    lv_obj_clear_flag (HelpPane, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollable (HelpPane, false);
 
     HelpHeader = lv_label_create (HelpPane);
     lv_label_set_text (HelpHeader, "Help");

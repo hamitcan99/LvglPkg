@@ -55,7 +55,7 @@
  *      DEFINES
  *********************/
 
-extern const lv_img_dsc_t mouse_cursor_icon;
+extern const lv_image_dsc_t mouse_cursor_icon;
 
 //
 // Wheel ratchet: accumulate this many raw Z counts before emitting one scroll
@@ -122,7 +122,7 @@ find_scrollable_at_point (
   if (hit == NULL) return NULL;
 
   for (lv_obj_t *o = hit; o != NULL; o = lv_obj_get_parent (o)) {
-    if (lv_obj_has_flag (o, LV_OBJ_FLAG_SCROLLABLE) &&
+    if (lv_obj_is_scrollable (o) &&
         lv_obj_get_scroll_top (o) + lv_obj_get_scroll_bottom (o) > 0)
     {
       return o;
@@ -176,7 +176,7 @@ mouse_read (
     // middle of the screen.
     //
     if (mCursorVisible && (mCursorObj != NULL)) {
-      lv_obj_add_flag (mCursorObj, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden (mCursorObj, true);
       mCursorVisible = FALSE;
     }
 
@@ -221,7 +221,7 @@ mouse_read (
     if (!mCursorVisible && (mCursorObj != NULL) &&
         ((mLastCursorX != PrevX) || (mLastCursorY != PrevY) || mLeftButton))
     {
-      lv_obj_clear_flag (mCursorObj, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_hidden (mCursorObj, false);
       mCursorVisible = TRUE;
     }
 
@@ -416,7 +416,7 @@ void lv_port_indev_init (lv_display_t *disp)
     lv_indev_set_read_cb (indev_mouse, mouse_read);
     lv_indev_set_display (indev_mouse, disp);
 
-    LV_IMG_DECLARE(mouse_cursor_icon);
+    LV_IMAGE_DECLARE(mouse_cursor_icon);
     lv_obj_t *cursor_obj = lv_image_create (lv_screen_active ());
     lv_image_set_src (cursor_obj, &mouse_cursor_icon);
     LvglThemeStyleCursor (cursor_obj);
@@ -427,7 +427,7 @@ void lv_port_indev_init (lv_display_t *disp)
     //
     mCursorObj     = cursor_obj;
     mCursorVisible = FALSE;
-    lv_obj_add_flag (mCursorObj, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_hidden (mCursorObj, true);
 
     //
     // Centre the cursor and zero the wheel accumulator.
